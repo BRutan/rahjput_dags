@@ -1,0 +1,3 @@
+option_chain_template: "{{ ticker }}_option_chains"
+option_chain_pull_interval_minutes: 15
+insider_transactions_table: insider_transactions

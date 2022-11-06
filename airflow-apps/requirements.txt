@@ -1,0 +1,5 @@
+jinja2
+pandas
+yahoo-earnings-calendar
+yfinance
+yahoo_fin
