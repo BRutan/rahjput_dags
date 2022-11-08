@@ -32,7 +32,8 @@ def get_and_insert_earnings_dates(**context):
 with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
-    schedule="@once"
+    schedule="@once",
+    start_date=days_ago(-1)
 ) as dag:
     
     log = logging.getLogger()

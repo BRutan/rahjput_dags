@@ -2,6 +2,7 @@ from airflow.models import Variable
 from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.utils.dates import days_ago
 from common.helpers import connect_postgres
 from datetime import datetime, timedelta
 import logging
@@ -111,8 +112,9 @@ def generate_tables(**context):
 ##############
 with DAG(
     dag_id='create_tables',
+    start_date=days_ago(-1),
     catchup=False,
-    schedule="@once"
+    schedule=None
 ) as dag:
     
     log = logging.getLogger()
@@ -122,7 +124,7 @@ with DAG(
     connect_postgres_task = PythonOperator(task_id='connect_postgres',
                                            python_callable=connect_postgres,
                                            provide_context=True,
-                                           op_kwargs={'log':log})
+                                           op_kwargs={'log':log, 'conn_id': 'postgres_default'})
     
     get_tickers_task = PythonOperator(task_id='get_tickers', 
                                       python_callable=get_tickers, 

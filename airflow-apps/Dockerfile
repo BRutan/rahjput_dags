@@ -25,6 +25,8 @@ RUN ACCEPT_EULA=Y apt-get install -y mssql-tools
 # Adds paths to the $PATH environment variable within the .bash_profile and .bashrc files
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
+RUN echo 'export PYTHONPATH="/root/source/airflow-apps"' >> ~/.bash_profile
+RUN echo 'export PYTHONPATH="/root/source/airflow-apps"' >> ~/.bashrc
 
 RUN pip install apache-airflow[snowflake,postgres,amazon,microsoft-mssql,mysql]==2.4
 RUN apt install supervisor -y
@@ -44,6 +46,7 @@ RUN mkdir ~/airflow
 WORKDIR /root/airflow
 COPY airflow.cfg /root/airflow/airflow.cfg
 COPY requirements.txt /root/airflow/requirements.txt
+RUN pip install -r /root/airflow/requirements.txt
 RUN pg_lsclusters
 USER postgres
 RUN pg_ctlcluster 14 main start \

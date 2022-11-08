@@ -3,6 +3,7 @@ from airflow.models import Variable
 from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.utils.dates import days_ago
 from airflow.utils.session import provide_session
 from common import connect_postgres, get_columns_to_write, get_dag_name, get_logger, get_variable_values, get_tickers 
 from datetime import datetime, timedelta

@@ -3,8 +3,7 @@ from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
-from common.helpers import get_tickers, get_columns_to_write, get_variable_values, connect_postgres
-from common import *
+from common import connect_postgres, get_columns_to_write, get_dag_name, get_tickers, get_variable_values
 from datetime import datetime
 from jinja2 import Template
 import logging
@@ -100,8 +99,6 @@ with DAG(
                                       provide_context=True,
                                       op_kwargs={'log' : log})
     
-    tickers = "{{ ti.xcom_pull(task_ids='get_tickers', key='tickers_to_track') }}"
-    
     get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',
                                             python_callable=get_columns_to_write,
                                             provide_context=True,
@@ -109,9 +106,11 @@ with DAG(
                                                         'table_name' : '{tickers[0]}_option_chains', 
                                                         'schema_name' : 'data'})
     
+    tickers = "{{ ti.xcom_pull(task_ids='get_tickers', key='tickers_to_track') }}"
+    
     get_and_insert_option_chains_tasks = []
     for ticker in tickers:
-        get_and_insert_option_chains_tasks.append(PythonOperator(task_id='get_and_insert_option_chains',
+        get_and_insert_option_chains_tasks.append(PythonOperator(task_id=f'get_and_insert_option_chains_{ticker}',
                                                         python_callable=get_and_insert_option_chains,
                                                         provide_context=True,
                                                         op_kwargs={'log':log, 
