@@ -4,7 +4,7 @@ RUN apt upgrade -y
 RUN yes | apt install software-properties-common
 RUN yes | add-apt-repository ppa:deadsnakes/ppa
 ENV TZ=America/New_York
-ENV AIRFLOW__CORE__FERNET_KEY=Ltyihv4AsuqdCyZQV1tHyvu5_3VmrSqm6g4FbevPGIM=
+#ENV AIRFLOW__CORE__FERNET_KEY=Ltyihv4AsuqdCyZQV1tHyvu5_3VmrSqm6g4FbevPGIM=
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN apt install python3.9 -y
 RUN apt install pip -y
@@ -31,7 +31,7 @@ RUN ACCEPT_EULA=Y apt-get install -y unixodbc-dev
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 
-RUN pip install apache-airflow[postgres,amazon]==2.4
+RUN pip install apache-airflow[snowflake,postgres,amazon,microsoft-mssql,mysql]==2.4
 RUN apt install supervisor -y
 ADD supervisord.conf /etc/supervsiro/conf.d/supervisord.conf
 #ENV TZ=America/New_York
@@ -47,8 +47,6 @@ RUN mkdir ~/airflow
 WORKDIR /root/airflow
 COPY airflow.cfg /root/airflow/airflow.cfg
 COPY requirements.txt /root/airflow/requirements.txt
-WORKDIR /root/airflow/
-#RUN pip install -r requirements.txt
 RUN pg_lsclusters
 USER postgres
 RUN pg_ctlcluster 14 main start \
