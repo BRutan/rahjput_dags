@@ -1,7 +1,6 @@
-CREATE TABLE IF NOT EXISTS data.{{ ticker }}_option_chains AS
+CREATE TABLE IF NOT EXISTS data.{{ ticker }}_option_chains
 (
     exp_date DATE,
-    strike FLOAT,
     isCall BOOLEAN,
     lastTradeDate DATE, 
     strike FLOAT, 

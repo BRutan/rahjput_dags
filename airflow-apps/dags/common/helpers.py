@@ -263,3 +263,42 @@ def get_columns_to_write(**context):
     target_columns = cursor.fetchall()
     target_columns = [elem[0] for elem in target_columns]
     context['ti'].xcom_push(key='columns_to_write', value=target_columns)
+    
+def get_and_validate_conf(**context):
+    """ Get and validate conf variables passed to DAG.
+    """ 
+    log = context['log']
+    conf = context['conf']
+    required = context['required']
+    optional = context.get('optional', {})
+    missing = []
+    invalid = {'name' : [], 'expected' : [], 'actual': []}
+    for var in required:
+        if not var in conf:
+            missing.append(var)
+        elif not isinstance(conf[var], required[var]):
+            invalid['name'].append(var)
+            invalid['expected'].append(str(required[var]))
+            invalid['actual'].append(str(type(conf[var])))
+    for var in optional:
+        if var in conf and not isinstance(conf[var], required[var]):
+            invalid['name'].append(var)
+            invalid['expected'].append(str(required[var]))
+            invalid['actual'].append(str(type(conf[var])))
+    errs = []
+    if missing:
+        errs.append('The following required conf inputs missing:')
+        errs.append(','.join(missing))
+    if invalid:
+        invalid = pd.DataFrame(invalid)
+        errs.append('The following conf variables had invalid types:')
+        log.warn(errs[-1])
+        log.warn(invalid)
+        errs.append(','.join(invalid['name']))
+    if errs:
+        for err in errs:
+            log.warn(err)
+        log.warn('Invalid: ')
+        log.warn(invalid)
+        raise Exception('One or more conf errors occurred.')
+    context['ti'].xcom_push(key='conf', value=conf)

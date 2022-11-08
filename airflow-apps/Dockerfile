@@ -31,6 +31,12 @@ RUN echo 'export POSTGRES_DEFS="/root/source/postgres"' >> ~/.bash_profile
 RUN echo 'export POSTGRES_DEFS="/root/source/postgres"' >> ~/.bashrc
 ENV PYTHONPATH=/root/source/airflow-apps
 ENV POSTGRES_DEFS=/root/source/postgres
+# Add default environment variables:
+RUN echo 'export AIRFLOW_VAR_data_schema=data' >> ~/.bash_profile
+RUN echo 'export AIRFLOW_VAR_data_schema=data' >> ~/.bashrc
+RUN echo 'export AIRFLOW_VAR_option_chain_pull_interval_minutes=30' >> ~/.bash_profile
+RUN echo 'export AIRFLOW_VAR_option_chain_pull_interval_minutes=30' >> ~/.bashrc 
+
 RUN pip install apache-airflow[snowflake,postgres,amazon,microsoft-mssql,mysql]==2.4
 RUN apt install supervisor -y
 ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf

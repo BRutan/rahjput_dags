@@ -1,5 +1,6 @@
 jinja2
 pandas
+sqlparse
 yahoo-earnings-calendar
 yfinance
 yahoo_fin

@@ -7,11 +7,10 @@ from airflow.utils.dates import days_ago
 from datetime import datetime, timedelta
 import logging
 from jinja2 import Template
+import json
 import os
 import re
 import sys
-
-sys.path.insert(0,os.path.abspath(os.path.dirname(__file__)))
 
 ##############
 # Steps:
@@ -19,7 +18,7 @@ sys.path.insert(0,os.path.abspath(os.path.dirname(__file__)))
 def get_tickers(**context) -> None:
     """Get tickers to create tables.
     """
-    tickers_path = os.path.join(os.environ['PYTHONPATH'], 'dags', 'tickers.txt')
+    tickers_path = os.path.join(os.environ['POSTGRES_DEFS'], 'tickers.txt')
     log = context['log']
     if not os.path.exists(tickers_path):
         err_msg = f'{tickers_path} does not exist.'
@@ -36,57 +35,62 @@ def generate_schemas(**context):
     log = context['log']
     log.info('Starting generate_schemas().')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_conn = pg_hook.get_conn()
-    cursor = pg_conn.cursor()
-    postgres_folder = os.path.join(os.environ['POSTGRES_DEFS'], 'postgres')
+    postgres_folder = os.environ['POSTGRES_DEFS']
     if not os.path.exists(postgres_folder):
         raise Exception(f'{postgres_folder} does not exist.')
     create_schemas_path = os.path.join(postgres_folder, 'create_schemas.sql')
     if not os.path.exists(create_schemas_path):
         raise Exception(f'{create_schemas_path} file is missing.')
     failed = []
-    with open(create_schemas_path, 'r') as f:
-        create_schema_stmts = f.read().split('\n')
-        for stmt in create_schema_stmts:
-            try:
-                cursor.execute(stmt)
-                cursor.fetchall()
-            except Exception as ex:
-                failed.append(f'"{stmt}", reason: {str(ex)}')
+    with pg_hook.get_conn() as pg_conn:
+        cursor = pg_conn.cursor()
+        with open(create_schemas_path, 'r') as f:
+            create_schema_stmts = f.read().split('\n')
+            for stmt in create_schema_stmts:
+                try:
+                    log.info(stmt)
+                    cursor.execute(stmt)
+                except Exception as ex:
+                    failed.append(f'"{stmt}", reason: {str(ex)}')
     if failed:
         raise Exception('\n'.join(failed))
         
 def generate_tables_from_templates(**context) -> None:
     """Generate tables from templates.
     """
-    template_patt = re.compile(r'CREATE TABLE IF NOT EXISTS ([^\.]\.[^\s]) AS')
+    template_patt = re.compile(r'CREATE TABLE IF NOT EXISTS [^\.]+\.([^\s]+)')
     tickers = context['ti'].xcom_pull(task_ids='get_tickers', key='tickers')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
-    postgres_folder = os.path.join(os.environ['POSTGRES_DEFS'], 'postgres')
+    postgres_folder = os.environ['POSTGRES_DEFS']
     if not os.path.exists(postgres_folder):
         raise Exception(f'{postgres_folder} does not exist.')
-    template_paths = os.listdir(postgres_folder)
-    template_paths = [path for path in template_paths if path.endswith('_template.sql')]
+    template_files = os.listdir(postgres_folder)
+    template_files = [path for path in template_files if path.endswith('_template.sql')]
     failed = []
+    set_vars = []
+    option_chains_tables = Variable.get('option_chains_tables', {})
     log.info('Generating tables from templates for tickers.')
-    for path in template_paths:
-        with open(path, 'r') as f:
-            content = f.read()
-            template_val = template_patt.search(content)[0]
-            Variable.set(path[0:path.find('.sql')], template_val)
-            for ticker in tickers:
-                try:
-                    template = Template(content)
-                    rendered = template.render(ticker=ticker)
-                    cursor.execute(rendered)
-                    cursor.fetchall()
-                    cursor.commit()
-                except Exception as ex:
-                    failed.append(f'{path}: {str(ex)}')
+    with pg_hook.get_conn() as pg_conn:
+        cursor = pg_conn.cursor()
+        for file in template_files:
+            full_path = os.path.join(postgres_folder, file)
+            with open(full_path, 'r') as f:
+                content = f.read()
+                for ticker in tickers:
+                    try:
+                        template = Template(content)
+                        rendered = template.render(ticker=ticker)
+                        table_name = template_patt.search(rendered)[1]
+                        log.info(rendered)
+                        cursor.execute(rendered)
+                        option_chains_tables[ticker] = table_name
+                    except Exception as ex:
+                        failed.append(f'{full_path}: {str(ex)}')
     if failed:
-        raise Exception('\n'.join(failed))     
+        raise Exception('\n'.join(failed))
+    Variable.set('option_chains_tables', json.dumps(option_chains_tables))
 
 def generate_tables(**context):
     """ Generate all non template tables.
@@ -94,52 +98,60 @@ def generate_tables(**context):
     log = context['log']
     log.info('Starting generate_tables.')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_conn = pg_hook.get_conn()
-    cursor = pg_conn.cursor()
-    postgres_folder = os.path.join(os.environ['POSTGRES_DEFS'], 'postgres')
+    postgres_folder = os.environ['POSTGRES_DEFS']
     log.info(f'Getting tables to generate from {postgres_folder}.')
     if not os.path.exists(postgres_folder):
         msg = 'postgres folder is missing.'
         log.exception(msg)
         raise Exception(msg)
+    table_patt = re.compile('\d+_([^\.]+)\.sql')
+    template_patt = re.compile(r'CREATE TABLE IF NOT EXISTS ([^\.]+\.[^\s]+)')
     files = os.listdir(postgres_folder)
-    files = [file for file in files if not file.endswith('_template.sql') and not file == 'create_schemas.sql']
+    files = [file for file in files if table_patt.match(file)]
+    files.sort()
     failed = []
-    for file in files:
-        with open(file, 'r') as f:
-            try:
-                cursor.execute(f.read())
-                cursor.fetchall()
-                cursor.commit()
-                Variable.set(file[0:file.find('.sql')], file[0:file.find('.sql')])
-            except Exception as ex:
-                failed.append(f'{file} failed. Reason: {str(ex)}')
+    table_names = Variable.get('table_names', {}, deserialize_json=True)
+    with pg_hook.get_conn() as pg_conn:
+        cursor = pg_conn.cursor()
+        for file in files:
+            full_path = os.path.join(postgres_folder, file)
+            with open(full_path, 'r') as f:
+                try:
+                    stmt = f.read()
+                    log.info(stmt)
+                    cursor.execute(stmt)
+                    table_key = table_patt.search(file)[1]
+                    full_table_name = template_patt.search(stmt)[1]
+                    table_names[table_key] = full_table_name
+                except Exception as ex:
+                    failed.append(f'{full_path} failed. Reason: {str(ex)}')
     if failed:
         for failure in failed:
             log.exception(failure)
         raise Exception('\n'.join(failed))
-    
+    Variable.set('table_names', json.dumps(table_names))
+
 def insert_tickers_to_track(**context):
     """ Insert all tickers we want to track.
     """
     log = context['log']
     target_table = context['target_table']
+    target_schema = context['target_schema']
     log.info('Starting generate_tables.')
     log.info(f'Inserting data into {target_table}.')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_conn = pg_hook.get_conn()
-    cursor = pg_conn.cursor()
     tickers = context['ti'].xcom_pull(task_ids='get_tickers', key='tickers')
-    for num, ticker in enumerate(tickers):
-        try:
-            cursor.execute(f"INSERT INTO {target_table} (company_id, ticker) VALUES ({num + 1},'{ticker}')")
-            cursor.fetchall()
-            cursor.commit()
-        except Exception as ex:
-            log.exception(ex)
-            raise ex
+    with pg_hook.get_conn() as pg_conn:
+        cursor = pg_conn.cursor()
+        for num, ticker in enumerate(tickers):
+            try:
+                stmt = f"INSERT INTO {target_schema}.{target_table} (ticker) VALUES ('{ticker}')"
+                log.info(stmt)
+                cursor.execute(stmt)
+            except Exception as ex:
+                log.exception(ex)
+                raise ex
             
-
 ##############
 # Dag:
 ##############
@@ -159,27 +171,39 @@ with DAG(
                                       provide_context=True, 
                                       op_kwargs={'log':log},
                                       dag=dag)
+    
+    generate_schemas_task = PythonOperator(task_id='generate_schemas',
+                                           python_callable=generate_schemas,
+                                           provide_context=True,
+                                           op_kwargs={'log':log, 
+                                                      'conn_id':'postgres_default'},
+                                           dag=dag)
 
     generate_table_templates_task = PythonOperator(task_id='generate_tables_from_templates',
                                                    python_callable=generate_tables_from_templates,
                                                    provide_context=True,
-                                                   op_kwargs={'log':log, 'conn_id':'postgres_default'},
+                                                   op_kwargs={'log':log, 
+                                                              'conn_id':'postgres_default'},
                                                    dag=dag)
     
     generate_tables_task = PythonOperator(task_id='generate_tables',
                                           python_callable=generate_tables,
                                           provide_context=True,
-                                          op_kwargs={'log':log, 'conn_id':'postgres_default'},
+                                          op_kwargs={'log':log, 
+                                                     'conn_id':'postgres_default'},
                                           dag=dag)
     
     insert_tickers_to_track_task = PythonOperator(task_id='insert_tickers_to_track',
                                                   python_callable=insert_tickers_to_track,
                                                   provide_context=True,
-                                                  op_kwargs={'log':log, 'conn_id':'postgres_default', 'target_table':'tickers_to_track'},
+                                                  op_kwargs={'log':log, 
+                                                             'conn_id':'postgres_default', 
+                                                             'target_table':'tickers_to_track',
+                                                             'target_schema':'data'},
                                                   dag=dag)
     
 
-    start >> get_tickers_task >> [generate_table_templates_task, generate_tables_task] >> insert_tickers_to_track_task
+    start >> get_tickers_task >> generate_schemas_task >> [generate_table_templates_task, generate_tables_task] >> insert_tickers_to_track_task
     
 
     

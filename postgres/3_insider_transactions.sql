@@ -1,6 +1,6 @@
-CREATE TABLE IF NOT EXISTS data.insider_transactions AS
+CREATE TABLE IF NOT EXISTS data.insider_transactions
 (
-    companyid SERIAL REFERENCES data.company_info,
+    company_id SERIAL REFERENCES data.tickers_to_track(company_id),
     name VARCHAR,
     share INT,
     change INT,
