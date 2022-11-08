@@ -28,7 +28,7 @@ RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 
 RUN pip install apache-airflow[snowflake,postgres,amazon,microsoft-mssql,mysql]==2.4
 RUN apt install supervisor -y
-ADD supervisord.conf /etc/supervsiro/conf.d/supervisord.conf
+ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 ENV TZ=America/New_York
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 ENV DEBIAN_FRONTEND=noninteractive
@@ -57,4 +57,4 @@ RUN pg_ctlcluster 14 main start \
     && airflow users create --role Admin --username admin --email admin --firstname admin --lastname admin --password admin
 EXPOSE 8080
 ENTRYPOINT pg_ctlcluster 14 main start \
-    && /usr/bin/supervisord
+    && /usr/bin/supervisord -n
