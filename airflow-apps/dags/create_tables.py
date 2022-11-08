@@ -38,13 +38,13 @@ def generate_schemas(**context):
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
-    if not os.path.exists('postgres/create_schemas.sql'):
-        raise Exception('postgres/create_schemas.sql file is missing.')
-    failed = []
-    postgres_folder = os.path.join(os.environ['PYTHONPATH'], 'postgres')
+    postgres_folder = os.path.join(os.environ['POSTGRES_DEFS'], 'postgres')
     if not os.path.exists(postgres_folder):
         raise Exception(f'{postgres_folder} does not exist.')
     create_schemas_path = os.path.join(postgres_folder, 'create_schemas.sql')
+    if not os.path.exists(create_schemas_path):
+        raise Exception(f'{create_schemas_path} file is missing.')
+    failed = []
     with open(create_schemas_path, 'r') as f:
         create_schema_stmts = f.read().split('\n')
         for stmt in create_schema_stmts:
@@ -64,7 +64,7 @@ def generate_tables_from_templates(**context) -> None:
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
-    postgres_folder = os.path.join(os.environ['PYTHONPATH'], 'postgres')
+    postgres_folder = os.path.join(os.environ['POSTGRES_DEFS'], 'postgres')
     if not os.path.exists(postgres_folder):
         raise Exception(f'{postgres_folder} does not exist.')
     template_paths = os.listdir(postgres_folder)
@@ -96,7 +96,7 @@ def generate_tables(**context):
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
-    postgres_folder = os.path.join(os.environ['PYTHONPATH'], 'postgres')
+    postgres_folder = os.path.join(os.environ['POSTGRES_DEFS'], 'postgres')
     log.info(f'Getting tables to generate from {postgres_folder}.')
     if not os.path.exists(postgres_folder):
         msg = 'postgres folder is missing.'

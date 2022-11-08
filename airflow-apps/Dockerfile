@@ -27,7 +27,10 @@ RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 RUN echo 'export PYTHONPATH="/root/source/airflow-apps"' >> ~/.bash_profile
 RUN echo 'export PYTHONPATH="/root/source/airflow-apps"' >> ~/.bashrc
+RUN echo 'export POSTGRES_DEFS="/root/source/postgres"' >> ~/.bash_profile
+RUN echo 'export POSTGRES_DEFS="/root/source/postgres"' >> ~/.bashrc
 ENV PYTHONPATH=/root/source/airflow-apps
+ENV POSTGRES_DEFS=/root/source/postgres
 RUN pip install apache-airflow[snowflake,postgres,amazon,microsoft-mssql,mysql]==2.4
 RUN apt install supervisor -y
 ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf
@@ -40,6 +43,7 @@ ENV POSTGRES_HOST_AUTH_METHOD=trust
 #WORKDIR /root/.pip
 #ADD pip.conf /root/.pip/pip.conf
 RUN apt install git
+RUN apt-get install nano
 WORKDIR /source
 WORKDIR /root
 RUN mkdir ~/airflow
