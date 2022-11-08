@@ -3,7 +3,7 @@ from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
-from common import connect_postgres, get_columns_to_write, get_dag_name, get_tickers, get_variable_values
+from common import connect_postgres, get_columns_to_write, get_dag_name, get_tickers, get_variable_values, list_str_to_list
 from datetime import datetime
 from jinja2 import Template
 import logging
@@ -87,26 +87,31 @@ with DAG(
                                     python_callable=get_variable_values, 
                                     provide_context=True,
                                     op_kwargs={log:log,
-                                               'variable_list' : ['tickers_to_track_table', 'option_chain_template','option_chain_pull_interval_minutes']})
+                                               'variable_list' : ['tickers_to_track_table', 'option_chain_template','option_chain_pull_interval_minutes']},
+                                    dag=dag)
     
     connect_postgres_task = PythonOperator(task_id='connect_postgres',
                                         python_callable=connect_postgres,
                                         provide_context=True,
-                                        op_kwargs={'conn_id':'postgres_default','log':log})
+                                        op_kwargs={'conn_id':'postgres_default','log':log},
+                                        dag=dag)
     
     get_tickers_task = PythonOperator(task_id='get_tickers',
                                       python_callable=get_tickers,
                                       provide_context=True,
-                                      op_kwargs={'log' : log})
+                                      op_kwargs={'log' : log},
+                                      dag=dag)
     
     get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',
                                             python_callable=get_columns_to_write,
                                             provide_context=True,
                                             op_kwargs={'log': log, 
                                                         'table_name' : '{tickers[0]}_option_chains', 
-                                                        'schema_name' : 'data'})
+                                                        'schema_name' : 'data'},
+                                            dag=dag)
     
     tickers = "{{ ti.xcom_pull(task_ids='get_tickers', key='tickers_to_track') }}"
+    tickers = list_str_to_list(tickers)
     
     get_and_insert_option_chains_tasks = []
     for ticker in tickers:
@@ -116,7 +121,10 @@ with DAG(
                                                         op_kwargs={'log':log, 
                                                                    'scheduler' : scheduler,
                                                                    'ticker':ticker, 
-                                                                   'end_time' : end_time}))
+                                                                   'end_time' : end_time}),
+                                                  dag=dag)
+    if not get_and_insert_option_chains_tasks:
+        get_and_insert_option_chains_tasks = EmptyOperator(task_id='no_tickers')
     
     start >> get_variables_task >> connect_postgres_task >> get_tickers_task >> get_columns_to_write_task >> get_and_insert_option_chains_tasks
     

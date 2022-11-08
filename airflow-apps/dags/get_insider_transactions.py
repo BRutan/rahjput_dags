@@ -44,29 +44,34 @@ with DAG(
                                         python_callable=get_variable_values, 
                                         provide_context=True,
                                         op_kwargs={'variable_list' : ['tickers_to_track_table'], 
-                                                   'log':log})
+                                                   'log':log},
+                                        dag=dag)
     
     get_tickers_task = PythonOperator(task_id='get_tickers',
                                       python_callable=get_tickers,
                                       provide_context=True,
-                                      op_kwargs={'log':log})
+                                      op_kwargs={'log':log},
+                                      dag=dag)
     
     connect_postgres_task = PythonOperator(task_id='connect_postgres',
                                         python_callable=connect_postgres,
                                         provide_context=True,
-                                        op_kwargs={'conn_id':'postgres_default','log':log})
+                                        op_kwargs={'conn_id':'postgres_default','log':log},
+                                        dag=dag)
     
     get_columns_task = PythonOperator(task_id='get_columns',
                                       python_callable=get_columns_to_write,
                                       provide_context=True,
-                                      op_kwargs={'log':log, 'table_name':'insider_transactions', 'schema_name':'data'})
+                                      op_kwargs={'log':log, 'table_name':'insider_transactions', 'schema_name':'data'},
+                                      dag=dag)
     
     get_and_insert_transactions_task = PythonOperator(task_id=f'get_and_insert_insider_transactions',
                                                         python_callable=get_and_insert_insider_transactions,
                                                         provide_context=True,
                                                         op_kwargs={'log': log, 
                                                                    'target_table' : 'insider_transactions', 
-                                                                   'target_schema' : 'data'})
+                                                                   'target_schema' : 'data'},
+                                                        dag=dag)
         
     start >> get_variables_task >> get_tickers_task >> connect_postgres_task >> get_columns_task >> get_and_insert_transactions_task 
 

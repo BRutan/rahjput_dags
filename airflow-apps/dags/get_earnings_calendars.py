@@ -3,7 +3,8 @@ from airflow.models import Variable
 from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
-from common.helpers import connect_postgres, get_dag_name, get_tickers, get_variable_values
+from airflow.utils.dates import days_ago
+from common import connect_postgres, get_dag_name, get_tickers, get_variable_values
 import logging
 import pandas
 import yahoo_fin.stock_info as si

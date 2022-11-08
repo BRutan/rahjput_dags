@@ -3,16 +3,13 @@ from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
 from airflow.utils.dates import days_ago
-from common.helpers import connect_postgres
+from common import connect_postgres
 from datetime import datetime, timedelta
 import logging
 from jinja2 import Template
 import os
-from pathlib import Path
 import re
 import sys
-
-sys.path.append(str(Path('../../').resolve()))
 
 ##############
 # Steps:
@@ -112,9 +109,9 @@ def generate_tables(**context):
 ##############
 with DAG(
     dag_id='create_tables',
-    start_date=days_ago(-1),
+    start_date=datetime.now(),
     catchup=False,
-    schedule=None
+    schedule='@once'
 ) as dag:
     
     log = logging.getLogger()
@@ -124,21 +121,26 @@ with DAG(
     connect_postgres_task = PythonOperator(task_id='connect_postgres',
                                            python_callable=connect_postgres,
                                            provide_context=True,
-                                           op_kwargs={'log':log, 'conn_id': 'postgres_default'})
+                                           op_kwargs={'log':log, 'conn_id': 'postgres_default'},
+                                           dag=dag)
     
     get_tickers_task = PythonOperator(task_id='get_tickers', 
                                       python_callable=get_tickers, 
                                       provide_context=True, 
-                                      op_kwargs={'log':log})
+                                      op_kwargs={'log':log},
+                                      dag=dag)
 
     generate_table_templates_task = PythonOperator(task_id='generate_tables_from_templates',
                                                    python_callable=generate_tables_from_templates,
                                                    provide_context=True,
-                                                   op_kwargs={'log':log})
+                                                   op_kwargs={'log':log},
+                                                   dag=dag)
     
     generate_tables_task = PythonOperator(task_id='generate_tables',
                                           python_callable=generate_tables,
-                                          op_kwargs={'log':log})
+                                          provide_context=True,
+                                          op_kwargs={'log':log},
+                                          dag=dag)
     
 
     start >> connect_postgres_task >> get_tickers_task >> [generate_table_templates_task, generate_tables_task]
