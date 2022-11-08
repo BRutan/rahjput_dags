@@ -5,7 +5,7 @@
 #from airflow.operators.python_operator import PythonOperator
 #from airflow.utils.session import provide_session
 #from airflow.models.xcom import XCom
-from common import *
+from common import get_dag_name, get_logger
 from datetime import datetime, timedelta
 import os
 import re

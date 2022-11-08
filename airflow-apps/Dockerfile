@@ -27,7 +27,7 @@ RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bash_profile
 RUN echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 RUN echo 'export PYTHONPATH="/root/source/airflow-apps"' >> ~/.bash_profile
 RUN echo 'export PYTHONPATH="/root/source/airflow-apps"' >> ~/.bashrc
-
+ENV PYTHONPATH=/root/source/airflow-apps
 RUN pip install apache-airflow[snowflake,postgres,amazon,microsoft-mssql,mysql]==2.4
 RUN apt install supervisor -y
 ADD supervisord.conf /etc/supervisor/conf.d/supervisord.conf

@@ -2,8 +2,9 @@ from airflow.models import Variable
 from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
+from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
-from common import connect_postgres, get_columns_to_write, get_dag_name, get_tickers, get_variable_values, list_str_to_list
+from common import get_columns_to_write, get_dag_name, get_tickers, get_variable_values, list_str_to_list
 from datetime import datetime
 from jinja2 import Template
 import logging
@@ -18,14 +19,15 @@ def get_and_insert_option_chains(**context)-> None:
     """Get option chain for single ticker and insert into postgres database.
     Perform every interval specified in "option_chain_pull_interval_minutes" variable. 
     """
+    variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
+    columns_to_write = context['ti'].xcom_pull(task_ids='get_columns_to_write', key='columns_to_write')
     log = context['log']
     ticker = context['ticker']
     log.info(f'Starting get_and_insert_option_chains for ticker {ticker}.')
     scheduler = context['scheduler']
     end_time = context['end_time']
-    postgres_conn = context['ti'].xcom_pull(task_ids='connect_postgres', key='postgres_conn')
-    variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
-    columns_to_write = context['ti'].xcom_pull(task_ids='get_columns_to_write', key='columns_to_write')
+    pg_hook = PostgresHook(conn_id=context['conn_id'])
+    pg_conn = pg_hook.get_connection()
     columns_to_write = list(set(columns_to_write) - set(['expirationDate', 'isCall']))
     interval = variable_values['option_chain_pull_interval_minutes']
     target_table = variable_values['option_chain_template']
@@ -33,14 +35,14 @@ def get_and_insert_option_chains(**context)-> None:
     target_table = template.render(ticker=ticker)
     tk = yfinance.Ticker(ticker)  
     log.info(f'Pulling data for {ticker} every {interval} minutes. Ending at {str(end_time)}.')
-    params = (interval, tk, ticker, postgres_conn, target_table, columns_to_write, scheduler, log, end_time)
+    params = (interval, tk, ticker, pg_conn, target_table, columns_to_write, scheduler, log, end_time)
     scheduler.enter(interval, 1, get_option_chain_and_insert, params)
     scheduler.run()
         
 ###########
 # Helpers:
 ###########
-def get_option_chain_and_insert(interval, tk, ticker, postgres_conn, target_table, columns_to_write, scheduler, log, end_time):
+def get_option_chain_and_insert(interval, tk, ticker, pg_conn, target_table, columns_to_write, scheduler, log, end_time):
     now = datetime.datetime.now()
     if now > end_time:
         return 
@@ -62,8 +64,8 @@ def get_option_chain_and_insert(interval, tk, ticker, postgres_conn, target_tabl
         data['expirationDate'].extend([exp] * (len(calls) + len(puts)))
     # Insert:
     data = pd.DataFrame(data)
-    data.to_sql(target_table, con=postgres_conn, if_exists='append')
-    scheduler.enter(interval, 1, get_option_chain_and_insert, (interval, tk, ticker, postgres_conn, target_table, columns_to_write, scheduler, log, end_time))
+    data.to_sql(target_table, con=pg_conn, if_exists='append')
+    scheduler.enter(interval, 1, get_option_chain_and_insert, (interval, tk, ticker, pg_conn, target_table, columns_to_write, scheduler, log, end_time))
         
 ###########
 # Dag:
@@ -90,16 +92,10 @@ with DAG(
                                                'variable_list' : ['tickers_to_track_table', 'option_chain_template','option_chain_pull_interval_minutes']},
                                     dag=dag)
     
-    connect_postgres_task = PythonOperator(task_id='connect_postgres',
-                                        python_callable=connect_postgres,
-                                        provide_context=True,
-                                        op_kwargs={'conn_id':'postgres_default','log':log},
-                                        dag=dag)
-    
     get_tickers_task = PythonOperator(task_id='get_tickers',
                                       python_callable=get_tickers,
                                       provide_context=True,
-                                      op_kwargs={'log' : log},
+                                      op_kwargs={'log' : log, 'conn_id' : 'postgres_default'},
                                       dag=dag)
     
     get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',
@@ -107,7 +103,8 @@ with DAG(
                                             provide_context=True,
                                             op_kwargs={'log': log, 
                                                         'table_name' : '{tickers[0]}_option_chains', 
-                                                        'schema_name' : 'data'},
+                                                        'schema_name' : 'data',
+                                                        'conn_id': 'postgres_default'},
                                             dag=dag)
     
     tickers = "{{ ti.xcom_pull(task_ids='get_tickers', key='tickers_to_track') }}"
@@ -121,7 +118,8 @@ with DAG(
                                                         op_kwargs={'log':log, 
                                                                    'scheduler' : scheduler,
                                                                    'ticker':ticker, 
-                                                                   'end_time' : end_time}),
+                                                                   'end_time' : end_time,
+                                                                   'conn_id': 'postgres_default'}),
                                                   dag=dag)
     if not get_and_insert_option_chains_tasks:
         get_and_insert_option_chains_tasks = EmptyOperator(task_id='no_tickers')

@@ -1,2 +1,2 @@
 logs/*
-airflow-apps/dags/__pycache__/*
+__pycache__/

@@ -234,31 +234,17 @@ def get_variable_values(**context):
         raise ValueError(msg)
     context['ti'].xcom_push(key='variable_values', value=variable_values)
     
-def connect_postgres(**context):
-    """
-    * Connect to postgres instance.
-    """
-    log = context['log']
-    log.info(f'Attempting to connect to postgres instance using conn_id {context["conn_id"]}.')
-    try:
-        pg_hook = PostgresHook(postgres_conn_id=context['conn_id'])
-        postgres_conn = pg_hook.get_conn()
-        context['ti'].xcom_push(key='postgres_conn', value=postgres_conn)
-    except Exception as ex:
-        msg = f'Failed to connect to postgres instance using conn_id {context["conn_id"]}. Reason: str({ex}).'
-        log.error(msg)
-        raise AirflowSkipException(msg)
-    
 def get_tickers(**context):
     """ Get tickers to track from table.
     """
     log = context['log']
     log.info('Starting get_tickers().')
-    pg_connect = context['ti'].xcom_pull(task_ids='connect_postgres', key='postgres_conn')
+    pg_hook = PostgresHook(conn_id=context['conn_id'])
+    pg_connect = pg_hook.get_connect()
+    cursor = pg_connect.cursor()
     variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
     tickers_to_track_table = variable_values['tickers_to_track_table']
     log.info('Getting tickers needed to be tracked from %s.', tickers_to_track_table)
-    cursor = pg_connect.cursor()
     tickers_to_track = cursor.execute(f'SELECT * FROM {tickers_to_track_table}')
     context['ti'].xcom_push(key='tickers_to_track', value=tickers_to_track)
     
@@ -267,11 +253,12 @@ def get_columns_to_write(**context):
     """
     log = context['log']
     log.info('Starting get_columns_to_write().')
-    pg_connect = context['ti'].xcom_pull(task_ids='connect_postgres', key='postgres_conn')
+    pg_hook = PostgresHook(conn_id=context['conn_id'])
+    pg_connect = pg_hook.get_connect()
+    cursor = pg_connect.cursor()
     table_name = context['table_name']
     schema_name =context['schema_name']
-    cursor = pg_connect.cursor()
-    log.info('Getting columns need to pull.')
+    log.info(f'Getting columns need to pull from {table_name}.')
     cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name='{table_name}")
     target_columns = cursor.fetchall()
     target_columns = [elem[0] for elem in target_columns]
