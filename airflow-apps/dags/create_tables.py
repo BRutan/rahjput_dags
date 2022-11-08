@@ -11,6 +11,8 @@ import os
 import re
 import sys
 
+sys.path.insert(0,os.path.abspath(os.path.dirname(__file__)))
+
 ##############
 # Steps:
 ##############
@@ -39,7 +41,11 @@ def generate_schemas(**context):
     if not os.path.exists('postgres/create_schemas.sql'):
         raise Exception('postgres/create_schemas.sql file is missing.')
     failed = []
-    with open('postgres/create_schemas.sql', 'r') as f:
+    postgres_folder = os.path.join(os.environ['PYTHONPATH'], 'postgres')
+    if not os.path.exists(postgres_folder):
+        raise Exception(f'{postgres_folder} does not exist.')
+    create_schemas_path = os.path.join(postgres_folder, 'create_schemas.sql')
+    with open(create_schemas_path, 'r') as f:
         create_schema_stmts = f.read().split('\n')
         for stmt in create_schema_stmts:
             try:
@@ -58,7 +64,10 @@ def generate_tables_from_templates(**context) -> None:
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
-    template_paths = os.listdir('postgres')
+    postgres_folder = os.path.join(os.environ['PYTHONPATH'], 'postgres')
+    if not os.path.exists(postgres_folder):
+        raise Exception(f'{postgres_folder} does not exist.')
+    template_paths = os.listdir(postgres_folder)
     template_paths = [path for path in template_paths if path.endswith('_template.sql')]
     failed = []
     log.info('Generating tables from templates for tickers.')
@@ -87,12 +96,13 @@ def generate_tables(**context):
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
-    log.info('Getting tables to generate from postgres folder.')
-    if not os.path.exists('postgres'):
+    postgres_folder = os.path.join(os.environ['PYTHONPATH'], 'postgres')
+    log.info(f'Getting tables to generate from {postgres_folder}.')
+    if not os.path.exists(postgres_folder):
         msg = 'postgres folder is missing.'
         log.exception(msg)
         raise Exception(msg)
-    files = os.listdir('postgres')
+    files = os.listdir(postgres_folder)
     files = [file for file in files if not file.endswith('_template.sql') and not file == 'create_schemas.sql']
     failed = []
     for file in files:

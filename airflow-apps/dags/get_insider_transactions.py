@@ -9,8 +9,9 @@ from airflow.utils.session import provide_session
 from common import get_columns_to_write, get_dag_name, get_logger, get_variable_values, get_tickers 
 from datetime import datetime, timedelta
 import logging
-import requests
 import os
+import requests
+import sys
 
 dag_name = get_dag_name(__file__)
 log = get_logger(__file__)

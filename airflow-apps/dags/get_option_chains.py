@@ -8,9 +8,11 @@ from common import get_columns_to_write, get_dag_name, get_tickers, get_variable
 from datetime import datetime
 from jinja2 import Template
 import logging
+import os
 import pandas as pd
 import yfinance
 import sched, time
+import sys
 
 ##############
 # Steps:

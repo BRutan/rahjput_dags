@@ -6,10 +6,10 @@ from airflow.operators.python_operator import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
 from common import get_dag_name, get_tickers, get_variable_values
+import os
 import logging
 import pandas
 import yahoo_fin.stock_info as si
-import sys
     
 def get_and_insert_earnings_dates(**context):
     """ Get future earnings dates over next six months
