@@ -128,7 +128,7 @@ with DAG(
     
         start >> get_variables_task >>  get_columns_to_write_task >> get_and_insert_option_chains_tasks
     else:
-        start >> EmptyOperator(task_id='No tickers present.')
+        start >> EmptyOperator(task_id='No_tickers_present.')
     
     
     

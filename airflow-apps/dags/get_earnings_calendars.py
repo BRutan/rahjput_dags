@@ -52,11 +52,11 @@ with DAG(
                                                 op_kwargs={'log': log, 
                                                            'conn_id':'postgres_default',
                                                            'ticker':ticker,
-                                                           'target_schema': 'data',
+                                                           'target_schema': 'airflow',
                                                            'target_table' : 'company_earnings_calendars'})
         
         start >> get_earnings_dates_task
     else:
-        start >> EmptyOperator(task_id='No tickers to track')
+        start >> EmptyOperator(task_id='No_tickers_to_track')
 
     

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS data.{{ ticker }}_company_data
+CREATE TABLE IF NOT EXISTS rahjput_data.{{ ticker }}_company_data
 (
 
 

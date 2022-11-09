@@ -8,6 +8,7 @@ RUN apt install curl -y
 RUN apt-get install libmysqlclient-dev -y
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt install libpq-dev -y
+RUN apt install sudo
 
 # Retrieve packages from Microsoft
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
@@ -32,8 +33,8 @@ RUN echo 'export POSTGRES_DEFS="/root/source/postgres"' >> ~/.bashrc
 ENV PYTHONPATH=/root/source/airflow-apps
 ENV POSTGRES_DEFS=/root/source/postgres
 # Add default environment variables:
-RUN echo 'export AIRFLOW_VAR_data_schema=data' >> ~/.bash_profile
-RUN echo 'export AIRFLOW_VAR_data_schema=data' >> ~/.bashrc
+RUN echo 'export AIRFLOW_VAR_data_schema=rahjput_data' >> ~/.bash_profile
+RUN echo 'export AIRFLOW_VAR_data_schema=rahjput_data' >> ~/.bashrc
 RUN echo 'export AIRFLOW_VAR_option_chain_pull_interval_minutes=30' >> ~/.bash_profile
 RUN echo 'export AIRFLOW_VAR_option_chain_pull_interval_minutes=30' >> ~/.bashrc 
 
@@ -62,7 +63,7 @@ USER postgres
 RUN pg_ctlcluster 14 main start \
     && pg_lsclusters \ 
     && psql -c "CREATE USER airflow SUPERUSER PASSWORD 'airflow'" \
-    && psql -c "CREATE DATABASE airflow;"
+    && psql -c "CREATE DATABASE rahjput_data;"
 USER root
 RUN pg_ctlcluster 14 main start \
     && pg_lsclusters \ 

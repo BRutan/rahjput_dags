@@ -58,7 +58,7 @@ with DAG(
                                                             provide_context=True,
                                                             op_kwargs={'log': log, 
                                                                     'target_table' : 'insider_transactions', 
-                                                                    'target_schema' : 'data',
+                                                                    'target_schema' : 'airflow',
                                                                     'conn_id' : 'postgres_default'},
                                                             dag=dag)
             

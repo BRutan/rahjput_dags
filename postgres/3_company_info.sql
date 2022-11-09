@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS data.company_info
+CREATE TABLE IF NOT EXISTS rahjput_data.company_info
 (
     company_id SERIAL REFERENCES data.tickers_to_track(company_id),
     ticker varchar,

@@ -204,7 +204,7 @@ with DAG(
                                                   op_kwargs={'log':log, 
                                                              'conn_id':'postgres_default', 
                                                              'target_table':'tickers_to_track',
-                                                             'target_schema':'data'},
+                                                             'target_schema':'airflow'},
                                                   dag=dag)
     
 
