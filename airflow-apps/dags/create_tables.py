@@ -95,8 +95,8 @@ def generate_tables_from_templates(**context) -> None:
                         failed.append(f'{full_path}: {str(ex)}')
     if failed:
         raise Exception('\n'.join(failed))
-    Variable.set('option_chains_tables', json.dumps(option_chains_tables))
-    Variable.set('company_earnings_tables', json.dumps(company_earnings_tables))
+    Variable.update(key='option_chains_tables', value=option_chains_tables)
+    Variable.update(key='company_earnings_tables', value=company_earnings_tables)
 
 def generate_tables(**context):
     """ Generate all non template tables.
@@ -135,7 +135,7 @@ def generate_tables(**context):
         for failure in failed:
             log.exception(failure)
         raise Exception('\n'.join(failed))
-    Variable.set('table_names', json.dumps(table_names))
+    Variable.update(key='table_names', value=table_names)
 
 def insert_tickers_to_track(**context):
     """ Insert all tickers we want to track.
