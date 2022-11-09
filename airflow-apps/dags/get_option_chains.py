@@ -69,7 +69,6 @@ def get_option_chain_and_insert(interval, tk, ticker, engine, target_table, targ
     else:
         log.info(f'Inserting into {target_table}.')
         data['upload_timestamp'] = [datetime.now()] * len(data['expirationdate'])
-        log.info([f'{col}:{len(data[col])}' for col in data])
         data = pd.DataFrame(data)
         data.to_sql(name=target_table, schema=target_schema, con=engine, if_exists='append')
     scheduler.enter(interval, 1, get_option_chain_and_insert, (interval, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time))
@@ -81,14 +80,14 @@ with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
     start_date=days_ago(1),
-    schedule="@once"#"30 9 * * 1-5"
+    schedule="30 14 * * 1-5"
 ) as dag:
     
     log = logging.getLogger()
     log.setLevel(logging.INFO)
     scheduler = sched.scheduler(time.time, time.sleep)
     present = datetime.now()
-    end_time = datetime(year=present.year, month=present.month, day=present.day + 1, hour=1, minute=0)
+    end_time = datetime(year=present.year, month=present.month, day=present.day, hour=5, minute=0)
     
     start = EmptyOperator(task_id = 'start')
     
