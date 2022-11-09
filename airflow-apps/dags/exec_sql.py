@@ -68,7 +68,6 @@ with DAG(
     dag_run = DagRun(dag_id=dag.dag_id)
     conf = dag_run.conf
     
-    
     op_kwargs = {'log' : log}
     start = EmptyOperator(task_id='start', dag=dag)
     required = {'sql' : (str)}

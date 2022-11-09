@@ -44,7 +44,7 @@ with DAG(
 ) as dag:
     
     log = get_logger(__file__)
-    conf = DagRun(dag_id=dag.dag_id)
+    conf = DagRun(dag_id=dag.dag_id).conf
     
     required = {'table_name': (str), 'schema' : (str)}
     optional = {'isregex' : (bool)}

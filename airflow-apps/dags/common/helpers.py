@@ -297,7 +297,7 @@ def get_and_validate_conf(**context):
     if missing:
         errs.append('The following required conf inputs missing:')
         errs.append(','.join(missing))
-    if invalid:
+    if len(invalid['name']) > 0:
         invalid = pd.DataFrame(invalid)
         errs.append('The following conf variables had invalid types:')
         log.warn(errs[-1])
