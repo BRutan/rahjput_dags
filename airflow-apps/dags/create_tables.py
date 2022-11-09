@@ -87,15 +87,16 @@ def generate_tables_from_templates(**context) -> None:
                         cursor.execute(rendered)
                         if file.startswith('option_chain'):
                             table_name = template_patt.search(rendered)[1]
-                            option_chains_tables[ticker] = table_name
+                            option_chains_tables[ticker] = table_name.lower()
                         elif file.startswith('company_earnings'):
                             table_name = template_patt.search(rendered)[1]
-                            company_earnings_tables[ticker] = table_name
+                            company_earnings_tables[ticker] = table_name.lower()
                     except Exception as ex:
                         failed.append(f'{full_path}: {str(ex)}')
     if failed:
         raise Exception('\n'.join(failed))
     Variable.set('option_chains_tables', json.dumps(option_chains_tables))
+    Variable.set('company_earnings_tables', json.dumps(company_earnings_tables))
 
 def generate_tables(**context):
     """ Generate all non template tables.
@@ -127,7 +128,7 @@ def generate_tables(**context):
                     cursor.execute(stmt)
                     table_key = table_patt.search(file)[1]
                     full_table_name = template_patt.search(stmt)[1]
-                    table_names[table_key] = full_table_name
+                    table_names[table_key] = full_table_name.lower()
                 except Exception as ex:
                     failed.append(f'{full_path} failed. Reason: {str(ex)}')
     if failed:
@@ -204,7 +205,7 @@ with DAG(
                                                   op_kwargs={'log':log, 
                                                              'conn_id':'postgres_default', 
                                                              'target_table':'tickers_to_track',
-                                                             'target_schema':'airflow'},
+                                                             'target_schema':'rahjput_data'},
                                                   dag=dag)
     
 

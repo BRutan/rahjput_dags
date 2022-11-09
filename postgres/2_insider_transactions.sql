@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS insider_transactions
+CREATE TABLE IF NOT EXISTS rahjput_data.insider_transactions
 (
     company_id SERIAL REFERENCES tickers_to_track(company_id),
     name VARCHAR,

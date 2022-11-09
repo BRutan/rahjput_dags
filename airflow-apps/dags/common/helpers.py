@@ -256,7 +256,7 @@ def get_columns_to_write(**context):
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_connect = pg_hook.get_conn()
     cursor = pg_connect.cursor()
-    table_name = context['table_name']
+    table_name = context['table_name'].lower()
     if '.' in table_name:
         schema_name, table_name = table_name.split('.')
     else: 
@@ -264,7 +264,7 @@ def get_columns_to_write(**context):
     log.info(f'Getting columns need to pull from {table_name}.')
     query = f"SELECT column_name FROM information_schema.columns WHERE table_name='{table_name}'"
     if schema_name is not None:
-        query += f" AND table_schema='{schema_name}'"
+        query += f" AND table_schema='{schema_name.lower()}'"
     log.info(query)
     cursor.execute(query)
     target_columns = cursor.fetchall()

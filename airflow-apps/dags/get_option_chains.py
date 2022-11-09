@@ -29,7 +29,7 @@ def get_and_insert_option_chains(**context)-> None:
     end_time = context['end_time']
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     with pg_hook.get_conn() as pg_conn:
-        columns_to_write = set(columns_to_write)
+        columns_to_write = set(columns_to_write) - set(['expirationdate', 'iscall'])
         interval = int(variable_values['option_chain_pull_interval_minutes'])
         tk = yfinance.Ticker(ticker)  
         log.info(f'Pulling data for {ticker} every {interval} minutes. Ending at {str(end_time)}.')
@@ -47,22 +47,24 @@ def get_option_chain_and_insert(interval, tk, ticker, pg_conn, target_table, tar
     log.info(f'Pulling options chains for {ticker} at {str(now)}.')
     exps = tk.options
     data = {col : [] for col in columns_to_write}
-    data['expirationDate'] = []
-    data['isCall'] = []
+    data['expirationdate'] = []
+    data['iscall'] = []
     for exp in exps:
         opt = tk.option_chain(exp)
         calls = opt.calls
-        for col in columns_to_write:
-            data[col].extend(calls[col])
-        data['isCall'].extend([True] * len(calls))
-        data['expirationDate'].extend([exp] * len(calls))
+        for col in calls.columns:
+            if col.lower() in data:
+                data[col.lower()].extend(calls[col])
+        data['iscall'].extend([True] * len(calls))
+        data['expirationdate'].extend([exp] * len(calls))
         puts = opt.puts
-        for col in columns_to_write:
-            data[col].extend(puts[col])
-        data['isCall'].extend([False] * len(calls))
-        data['expirationDate'].extend([exp] * len(puts))
+        for col in opt.puts:
+            if col.lower() in data:
+                data[col.lower()].extend(puts[col])
+        data['iscall'].extend([False] * len(calls))
+        data['expirationdate'].extend([exp] * len(puts))
     # Insert:
-    if len(data['expirationDate']) == 0:
+    if len(data['expirationdate']) == 0:
         log.warn(f'No option chains available for {ticker}.')
     else:
         log.info(f'Inserting into {target_table}.')
