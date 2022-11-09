@@ -240,7 +240,7 @@ def get_tickers(**context):
     log = context['log']
     log.info('Starting get_tickers().')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_connect = pg_hook.get_connect()
+    pg_connect = pg_hook.get_conn()
     cursor = pg_connect.cursor()
     variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
     tickers_to_track_table = variable_values['tickers_to_track_table']
@@ -254,12 +254,16 @@ def get_columns_to_write(**context):
     log = context['log']
     log.info('Starting get_columns_to_write().')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_connect = pg_hook.get_connect()
+    pg_connect = pg_hook.get_conn()
     cursor = pg_connect.cursor()
     table_name = context['table_name']
-    schema_name =context['schema_name']
+    if '.' in table_name:
+        schema_name, table_name = table_name.split('.')
+    else: 
+        schema_name = context['schema_name']
     log.info(f'Getting columns need to pull from {table_name}.')
-    cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name='{table_name}")
+    cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name='{table_name}'")
+    log.info(f"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name='{table_name}'")
     target_columns = cursor.fetchall()
     target_columns = [elem[0] for elem in target_columns]
     context['ti'].xcom_push(key='columns_to_write', value=target_columns)

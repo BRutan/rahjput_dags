@@ -33,7 +33,7 @@ def execute_sql(**context):
     statements = sqlparse.split(sql)
     if len(statements) == 0:
         log.info('No sql statements provided.')
-    with pg_hook.get_connect() as pg_conn:
+    with pg_hook.get_conn() as pg_conn:
         cursor = pg_conn.cursor()
         for statement in statements:    
             try:
@@ -60,7 +60,7 @@ def execute_sql(**context):
 with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
-    start_date=days_ago(-1),
+    start_date=days_ago(1),
     schedule="@once"
 ) as dag:
     

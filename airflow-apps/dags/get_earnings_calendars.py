@@ -20,7 +20,7 @@ def get_and_insert_earnings_dates(**context):
     variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
     tickers_to_track = context['ti'].xcom_pull(task_ids='get_tickers', key='tickers_to_track')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_conn = pg_hook.get_connect()
+    pg_conn = pg_hook.get_conn()
     tickers_to_track_table = variable_values['tickers_to_track_table']
     log.info('Getting earnings dates for companies loaded in %s table', tickers_to_track_table)
     data = {'company_id' : [], 'earnings_date' : []}

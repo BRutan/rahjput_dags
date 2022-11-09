@@ -28,7 +28,7 @@ def get_and_insert_prices(**context):
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     tickers = context['tickers']
     table_name = context['variables']
-    pg_conn = pg_hook.get_connect()
+    pg_conn = pg_hook.get_conn()
     cursor = pg_conn.cursor()
     
         
