@@ -10,7 +10,7 @@ import logging
 import os
 import pandas as pd
 import yfinance
-import sched, time
+import time
 
 ##############
 # Steps:
@@ -25,26 +25,26 @@ def get_and_insert_option_chains(**context)-> None:
     ticker = context['ticker']
     target_table = context['target_table']
     target_schema = context.get('target_schema', None)
-    scheduler = context['scheduler']
     end_time = context['end_time']
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     engine = pg_hook.get_sqlalchemy_engine()
     columns_to_write = set(columns_to_write) - set(['expirationdate', 'iscall', 'upload_timestamp'])
     interval_mins = int(variable_values['option_chain_pull_interval_minutes'])
-    interval_ms = interval_mins * 60 * 1000
     tk = yfinance.Ticker(ticker)  
     log.info(f'Pulling data for {ticker} every {interval_mins} minutes. Ending at {str(end_time)}.')
-    params = (interval_ms, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time)
-    scheduler.enter(interval_ms, 1, get_option_chain_and_insert, params)
-    scheduler.run()
+    params = (tk, ticker, engine, target_table, target_schema, columns_to_write, log, end_time)
+    should_continue = True
+    while should_continue:
+        should_continue = get_option_chain_and_insert(*params)
+        time.sleep(interval_mins * 60)
         
 ###########
 # Helpers:
 ###########
-def get_option_chain_and_insert(interval, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time):
+def get_option_chain_and_insert(tk, ticker, engine, target_table, target_schema, columns_to_write, log, end_time):
     now = datetime.now()
     if now > end_time:
-        return 
+        return False
     log.info(f'Pulling options chains for {ticker} at {str(now)}.')
     exps = tk.options
     data = {col : [] for col in columns_to_write}
@@ -72,8 +72,7 @@ def get_option_chain_and_insert(interval, tk, ticker, engine, target_table, targ
         data['upload_timestamp'] = [datetime.now()] * len(data['expirationdate'])
         data = pd.DataFrame(data)
         data.to_sql(name=target_table, schema=target_schema, con=engine, if_exists='append')
-    scheduler.enter(interval, 1, get_option_chain_and_insert, (interval, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time))
-        
+    return True
 ###########
 # Dag:
 ###########
@@ -81,14 +80,13 @@ with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
     start_date=days_ago(1),
-    schedule="30 14 * * 1-5"
+    schedule="30 9 * * 1-5"
 ) as dag:
     
     log = logging.getLogger()
     log.setLevel(logging.INFO)
-    scheduler = sched.scheduler(time.time, time.sleep)
     present = datetime.now()
-    end_time = datetime(year=present.year, month=present.month, day=present.day, hour=5, minute=0)
+    end_time = datetime(year=present.year, month=present.month, day=present.day, hour=17, minute=0)
     
     start = EmptyOperator(task_id = 'start')
     
@@ -119,7 +117,6 @@ with DAG(
                                     python_callable=get_and_insert_option_chains,
                                     provide_context=True,
                                     op_kwargs={'log':log, 
-                                                'scheduler' : scheduler,
                                                 'ticker':ticker, 
                                                 'end_time' : end_time,
                                                 'target_table': option_chain_tables[ticker], 
