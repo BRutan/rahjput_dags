@@ -58,7 +58,7 @@ def generate_schemas(**context):
 def generate_tables_from_templates(**context) -> None:
     """Generate tables from templates.
     """
-    template_patt = re.compile(r'CREATE TABLE IF NOT EXISTS [^\.]+\.([^\s]+)')
+    template_patt = re.compile(r'CREATE TABLE IF NOT EXISTS ([^\.]+\.[^\s]+)')
     tickers = context['ti'].xcom_pull(task_ids='get_tickers', key='tickers')
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     pg_conn = pg_hook.get_conn()
@@ -71,6 +71,7 @@ def generate_tables_from_templates(**context) -> None:
     failed = []
     set_vars = []
     option_chains_tables = Variable.get('option_chains_tables', {})
+    company_earnings_tables = Variable.get('company_earnings_tables', {})
     log.info('Generating tables from templates for tickers.')
     with pg_hook.get_conn() as pg_conn:
         cursor = pg_conn.cursor()
@@ -82,10 +83,14 @@ def generate_tables_from_templates(**context) -> None:
                     try:
                         template = Template(content)
                         rendered = template.render(ticker=ticker)
-                        table_name = template_patt.search(rendered)[1]
                         log.info(rendered)
                         cursor.execute(rendered)
-                        option_chains_tables[ticker] = table_name
+                        if file.startswith('option_chain'):
+                            table_name = template_patt.search(rendered)[1]
+                            option_chains_tables[ticker] = table_name
+                        elif file.startswith('company_earnings'):
+                            table_name = template_patt.search(rendered)[1]
+                            company_earnings_tables[ticker] = table_name
                     except Exception as ex:
                         failed.append(f'{full_path}: {str(ex)}')
     if failed:

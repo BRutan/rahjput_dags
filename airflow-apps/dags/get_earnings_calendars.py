@@ -5,7 +5,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python_operator import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
-from common import get_dag_name, get_tickers, get_variable_values
+from common import get_dag_name, get_logger, get_tickers, get_variable_values
 import os
 import logging
 import pandas
@@ -39,28 +39,24 @@ with DAG(
     start_date=days_ago(-1)
 ) as dag:
     
-    log = logging.getLogger()
-    log.setLevel(logging.INFO)
-    
+    log = get_logger(__file__)
     start = EmptyOperator(task_id='start')
     
-    get_variables_task = PythonOperator(task_id='get_variables',
-                                        python_callable=get_variable_values, 
-                                        provide_context=True,
-                                        op_kwargs={'variable_list' : ['tickers_to_track_table', 'company_earnings_calendar_table']})
-
-    
-    get_tickers_task = PythonOperator(task_id='get_tickers',
-                                      python_callable=get_tickers,
-                                      provide_context=True,
-                                      op_kwargs={'log':log, 'conn_id' : 'postgres_default'})
-    
-    get_earnings_dates_task = PythonOperator(task_id='get_earnings_dates',
-                                             python_callable=get_and_insert_earnings_dates,
-                                             provide_context=True,
-                                             op_kwargs={'log': log, 'conn_id':'postgres_default'})
-    
-    
-    start >> get_variables_task >> get_tickers_task >> get_earnings_dates_task
+    earnings_info_tables = Variable.get('earnings_info_tables', [], deserialize_json=True)
+    if len(earnings_info_tables) > 0:
+        for ticker in earnings_info_tables:
+            
+            get_earnings_dates_task = PythonOperator(task_id=f'get_earnings_dates_{ticker}',
+                                                python_callable=get_and_insert_earnings_dates,
+                                                provide_context=True,
+                                                op_kwargs={'log': log, 
+                                                           'conn_id':'postgres_default',
+                                                           'ticker':ticker,
+                                                           'target_schema': 'data',
+                                                           'target_table' : 'company_earnings_calendars'})
+        
+        start >> get_earnings_dates_task
+    else:
+        start >> EmptyOperator(task_id='No tickers to track')
 
     

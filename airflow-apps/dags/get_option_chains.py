@@ -25,9 +25,7 @@ def get_and_insert_option_chains(**context)-> None:
     columns_to_write = context['ti'].xcom_pull(task_ids='get_columns_to_write', key='columns_to_write')
     log = context['log']
     ticker = context['ticker']
-    target_schema = context['target_schema']
-    target_table = f"{target_schema}.{context['target_table']}"
-    log.info(f'Starting get_and_insert_option_chains for ticker {ticker}.')
+    target_table = context['target_table']
     scheduler = context['scheduler']
     end_time = context['end_time']
     pg_hook = PostgresHook(conn_id=context['conn_id'])
@@ -36,6 +34,7 @@ def get_and_insert_option_chains(**context)-> None:
     interval = variable_values['option_chain_pull_interval_minutes']
     tk = yfinance.Ticker(ticker)  
     log.info(f'Pulling data for {ticker} every {interval} minutes. Ending at {str(end_time)}.')
+    log.info(f'Inserting into {target_table}')
     params = (interval, tk, ticker, pg_conn, target_table, columns_to_write, scheduler, log, end_time)
     scheduler.enter(interval, 1, get_option_chain_and_insert, params)
     scheduler.run()
@@ -74,8 +73,8 @@ def get_option_chain_and_insert(interval, tk, ticker, pg_conn, target_table, col
 with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
-    start_date=days_ago(-1),
-    schedule="30 9 * * 1-5"
+    start_date=days_ago(1),
+    schedule="@once"#"30 9 * * 1-5"
 ) as dag:
     
     log = logging.getLogger()
@@ -86,42 +85,45 @@ with DAG(
     
     start = EmptyOperator(task_id = 'start')
     
-    get_variables_task = PythonOperator(task_id='get_variables',
-                                    python_callable=get_variable_values, 
-                                    provide_context=True,
-                                    op_kwargs={log:log,
-                                               'variable_list' : ['tickers_to_track_table', 
-                                                                  'option_chain_template',
-                                                                  'option_chain_pull_interval_minutes']},
-                                    dag=dag)
-    
-    get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',
-                                            python_callable=get_columns_to_write,
-                                            provide_context=True,
-                                            op_kwargs={'log': log, 
-                                                        'table_name' : '{tickers[0]}_option_chains', 
-                                                        'schema_name' : 'data',
-                                                        'conn_id': 'postgres_default'},
-                                            dag=dag)
-    
     option_chain_tables = Variable.get('option_chains_tables', [], deserialize_json=True)
-    get_and_insert_option_chains_tasks = []
-    for ticker in option_chain_tables:
-        get_and_insert_option_chains_tasks.append(PythonOperator(task_id=f'get_and_insert_option_chains_{ticker}',
-                                                        python_callable=get_and_insert_option_chains,
-                                                        provide_context=True,
-                                                        op_kwargs={'log':log, 
-                                                                   'scheduler' : scheduler,
-                                                                   'ticker':ticker, 
-                                                                   'end_time' : end_time,
-                                                                   'target_schema' : 'data',
-                                                                   'target_table' : option_chain_tables[ticker], 
-                                                                   'conn_id': 'postgres_default'}),
-                                                  dag=dag)
-    if not get_and_insert_option_chains_tasks:
-        get_and_insert_option_chains_tasks = EmptyOperator(task_id='no_tickers')
+    if len(option_chain_tables) > 1:
+        tickers = list(option_chain_tables.keys())
+        ex_ticker = tickers[0]
+        ex_table = option_chain_tables[ex_ticker]
+        
+        get_variables_task = PythonOperator(task_id='get_variables',
+                                        python_callable=get_variable_values, 
+                                        provide_context=True,
+                                        op_kwargs={'log':log,
+                                                   'variables_list' : ['option_chain_pull_interval_minutes']},
+                                        dag=dag)
+        
+        get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',
+                                                python_callable=get_columns_to_write,
+                                                provide_context=True,
+                                                op_kwargs={'log': log, 
+                                                            'table_name' : ex_table,
+                                                            'conn_id': 'postgres_default'},
+                                                dag=dag)
+        
+        
+        get_and_insert_option_chains_tasks = []
+        for ticker in option_chain_tables:
+            operator = PythonOperator(task_id=f'get_and_insert_option_chains_{ticker}',
+                                    python_callable=get_and_insert_option_chains,
+                                    provide_context=True,
+                                    op_kwargs={'log':log, 
+                                                'scheduler' : scheduler,
+                                                'ticker':ticker, 
+                                                'end_time' : end_time,
+                                                'target_table' : option_chain_tables[ticker], 
+                                                'conn_id': 'postgres_default'},
+                                        dag=dag)
+            get_and_insert_option_chains_tasks.append(operator)
     
-    start >> get_variables_task >> connect_postgres_task >> get_tickers_task >> get_columns_to_write_task >> get_and_insert_option_chains_tasks
+        start >> get_variables_task >>  get_columns_to_write_task >> get_and_insert_option_chains_tasks
+    else:
+        start >> EmptyOperator(task_id='No tickers present.')
     
     
     

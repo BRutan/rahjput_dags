@@ -41,39 +41,29 @@ with DAG(
     log.setLevel(logging.INFO)
     
     start = EmptyOperator(task_id='start')
-    
-    get_variables_task = PythonOperator(task_id='get_variables',
-                                        python_callable=get_variable_values, 
+
+    option_chain_tables = Variable.get('option_chains_tables', [], deserialize_json=True)
+    if len(option_chain_tables) > 0:
+        get_columns_task = PythonOperator(task_id='get_columns',
+                                        python_callable=get_columns_to_write,
                                         provide_context=True,
-                                        op_kwargs={'variable_list' : ['tickers_to_track_table'], 
-                                                   'log':log},
+                                        op_kwargs={'log':log, 
+                                                    'table_name':'insider_transactions', 
+                                                    'schema_name':'data', 
+                                                    'conn_id':'postgres_default'},
                                         dag=dag)
-    
-    get_tickers_task = PythonOperator(task_id='get_tickers',
-                                      python_callable=get_tickers,
-                                      provide_context=True,
-                                      op_kwargs={'log':log,
-                                                 'conn_id' : 'postgres_default'},
-                                      dag=dag)
-    
-    get_columns_task = PythonOperator(task_id='get_columns',
-                                      python_callable=get_columns_to_write,
-                                      provide_context=True,
-                                      op_kwargs={'log':log, 
-                                                 'table_name':'insider_transactions', 
-                                                 'schema_name':'data', 
-                                                 'conn_id':'postgres_default'},
-                                      dag=dag)
-    
-    get_and_insert_transactions_task = PythonOperator(task_id=f'get_and_insert_insider_transactions',
-                                                        python_callable=get_and_insert_insider_transactions,
-                                                        provide_context=True,
-                                                        op_kwargs={'log': log, 
-                                                                   'target_table' : 'insider_transactions', 
-                                                                   'target_schema' : 'data',
-                                                                   'conn_id' : 'postgres_default'},
-                                                        dag=dag)
         
-    start >> get_variables_task >> get_tickers_task >> get_columns_task >> get_and_insert_transactions_task 
+        get_and_insert_transactions_task = PythonOperator(task_id=f'get_and_insert_insider_transactions',
+                                                            python_callable=get_and_insert_insider_transactions,
+                                                            provide_context=True,
+                                                            op_kwargs={'log': log, 
+                                                                    'target_table' : 'insider_transactions', 
+                                                                    'target_schema' : 'data',
+                                                                    'conn_id' : 'postgres_default'},
+                                                            dag=dag)
+            
+        start >>get_columns_task >> get_and_insert_transactions_task 
+    else:
+        start >> EmptyOperator(task_id='no_tickers_to_track')
 
 
