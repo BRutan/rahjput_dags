@@ -63,7 +63,7 @@ USER postgres
 RUN pg_ctlcluster 14 main start \
     && pg_lsclusters \ 
     && psql -c "CREATE USER airflow SUPERUSER PASSWORD 'airflow'" \
-    && psql -c "CREATE DATABASE rahjput_data;"
+    && psql -c "CREATE DATABASE airflow;"
 USER root
 RUN pg_ctlcluster 14 main start \
     && pg_lsclusters \ 

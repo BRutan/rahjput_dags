@@ -24,7 +24,7 @@ def get_and_insert_option_chains(**context)-> None:
     log = context['log']
     ticker = context['ticker']
     target_table = context['target_table']
-    target_schema = context['target_schema']
+    target_schema = context.get('target_schema', None)
     scheduler = context['scheduler']
     end_time = context['end_time']
     pg_hook = PostgresHook(conn_id=context['conn_id'])
@@ -112,7 +112,6 @@ with DAG(
         
         get_and_insert_option_chains_tasks = []
         for ticker in option_chain_tables:
-            schema, table_name = option_chain_tables[ticker].split('.')
             operator = PythonOperator(task_id=f'get_and_insert_option_chains_{ticker}',
                                     python_callable=get_and_insert_option_chains,
                                     provide_context=True,
@@ -120,8 +119,7 @@ with DAG(
                                                 'scheduler' : scheduler,
                                                 'ticker':ticker, 
                                                 'end_time' : end_time,
-                                                'target_schema': schema,
-                                                'target_table' : table_name, 
+                                                'target_table': option_chain_tables[ticker], 
                                                 'conn_id': 'postgres_default'},
                                         dag=dag)
             get_and_insert_option_chains_tasks.append(operator)

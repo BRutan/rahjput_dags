@@ -260,10 +260,13 @@ def get_columns_to_write(**context):
     if '.' in table_name:
         schema_name, table_name = table_name.split('.')
     else: 
-        schema_name = context['schema_name']
+        schema_name = context.get('schema_name', None)
     log.info(f'Getting columns need to pull from {table_name}.')
-    cursor.execute(f"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name='{table_name}'")
-    log.info(f"SELECT column_name FROM information_schema.columns WHERE table_schema = '{schema_name}' AND table_name='{table_name}'")
+    query = f"SELECT column_name FROM information_schema.columns WHERE table_name='{table_name}'"
+    if schema_name is not None:
+        query += f" AND table_schema='{schema_name}"
+    log.info(query)
+    cursor.execute(query)
     target_columns = cursor.fetchall()
     target_columns = [elem[0] for elem in target_columns]
     context['ti'].xcom_push(key='columns_to_write', value=target_columns)

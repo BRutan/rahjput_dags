@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS rahjput_data.{{ ticker }}_option_chains
+CREATE TABLE IF NOT EXISTS {{ ticker }}_option_chains
 (
     expirationDate DATE,
     isCall BOOLEAN,
