@@ -70,8 +70,8 @@ def generate_tables_from_templates(**context) -> None:
     template_files = [path for path in template_files if path.endswith('_template.sql')]
     failed = []
     set_vars = []
-    option_chains_tables = Variable.get('option_chains_tables', {})
-    company_earnings_tables = Variable.get('company_earnings_tables', {})
+    option_chains_tables = Variable.get('option_chains_tables', {}, deserialize_json=True)
+    company_earnings_tables = Variable.get('company_earnings_tables', {}, deserialize_json=True)
     log.info('Generating tables from templates for tickers.')
     with pg_hook.get_conn() as pg_conn:
         cursor = pg_conn.cursor()
