@@ -28,19 +28,19 @@ def get_and_insert_option_chains(**context)-> None:
     scheduler = context['scheduler']
     end_time = context['end_time']
     pg_hook = PostgresHook(conn_id=context['conn_id'])
-    with pg_hook.get_conn() as pg_conn:
-        columns_to_write = set(columns_to_write) - set(['expirationdate', 'iscall'])
-        interval = int(variable_values['option_chain_pull_interval_minutes'])
-        tk = yfinance.Ticker(ticker)  
-        log.info(f'Pulling data for {ticker} every {interval} minutes. Ending at {str(end_time)}.')
-        params = (interval, tk, ticker, pg_conn, target_table, target_schema, columns_to_write, scheduler, log, end_time)
-        scheduler.enter(interval, 1, get_option_chain_and_insert, params)
-        scheduler.run()
+    engine = pg_hook.get_sqlalchemy_engine()
+    columns_to_write = set(columns_to_write) - set(['expirationdate', 'iscall', 'upload_timestamp'])
+    interval = int(variable_values['option_chain_pull_interval_minutes'])
+    tk = yfinance.Ticker(ticker)  
+    log.info(f'Pulling data for {ticker} every {interval} minutes. Ending at {str(end_time)}.')
+    params = (interval, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time)
+    scheduler.enter(interval, 1, get_option_chain_and_insert, params)
+    scheduler.run()
         
 ###########
 # Helpers:
 ###########
-def get_option_chain_and_insert(interval, tk, ticker, pg_conn, target_table, target_schema, columns_to_write, scheduler, log, end_time):
+def get_option_chain_and_insert(interval, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time):
     now = datetime.now()
     if now > end_time:
         return 
@@ -61,17 +61,18 @@ def get_option_chain_and_insert(interval, tk, ticker, pg_conn, target_table, tar
         for col in opt.puts:
             if col.lower() in data:
                 data[col.lower()].extend(puts[col])
-        data['iscall'].extend([False] * len(calls))
+        data['iscall'].extend([False] * len(puts))
         data['expirationdate'].extend([exp] * len(puts))
     # Insert:
     if len(data['expirationdate']) == 0:
         log.warn(f'No option chains available for {ticker}.')
     else:
         log.info(f'Inserting into {target_table}.')
+        data['upload_timestamp'] = [datetime.now()] * len(data['expirationdate'])
         log.info([f'{col}:{len(data[col])}' for col in data])
         data = pd.DataFrame(data)
-        data.to_sql(name=target_table, schema=target_schema, con=pg_conn, if_exists='append')
-    scheduler.enter(interval, 1, get_option_chain_and_insert, (interval, tk, ticker, pg_conn, target_table, target_schema, columns_to_write, scheduler, log, end_time))
+        data.to_sql(name=target_table, schema=target_schema, con=engine, if_exists='append')
+    scheduler.enter(interval, 1, get_option_chain_and_insert, (interval, tk, ticker, engine, target_table, target_schema, columns_to_write, scheduler, log, end_time))
         
 ###########
 # Dag:

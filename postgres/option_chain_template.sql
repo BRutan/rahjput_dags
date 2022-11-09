@@ -9,5 +9,6 @@ CREATE TABLE IF NOT EXISTS rahjput_data.{{ ticker }}_option_chains
     ask FLOAT,
     volume FLOAT, 
     openInterest INT,
-    impliedVolatility FLOAT
+    impliedVolatility FLOAT,
+    upload_timestamp TIMESTAMP
 );

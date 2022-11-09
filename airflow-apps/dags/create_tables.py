@@ -69,9 +69,10 @@ def generate_tables_from_templates(**context) -> None:
     template_files = os.listdir(postgres_folder)
     template_files = [path for path in template_files if path.endswith('_template.sql')]
     failed = []
-    set_vars = []
     option_chains_tables = Variable.get('option_chains_tables', {}, deserialize_json=True)
     company_earnings_tables = Variable.get('company_earnings_tables', {}, deserialize_json=True)
+    option_chains_tables_exists = len(option_chains_tables) != 0
+    company_earnings_tables_exists = len(company_earnings_tables) != 0
     log.info('Generating tables from templates for tickers.')
     with pg_hook.get_conn() as pg_conn:
         cursor = pg_conn.cursor()
@@ -95,8 +96,14 @@ def generate_tables_from_templates(**context) -> None:
                         failed.append(f'{full_path}: {str(ex)}')
     if failed:
         raise Exception('\n'.join(failed))
-    Variable.update(key='option_chains_tables', value=option_chains_tables)
-    Variable.update(key='company_earnings_tables', value=company_earnings_tables)
+    if option_chains_tables_exists:
+        Variable.update(key='option_chains_tables', value=json.dumps(option_chains_tables))
+    else:
+        Variable.set(key='option_chains_tables', value=json.dumps(option_chains_tables))
+    if company_earnings_tables_exists:
+        Variable.update(key='company_earnings_tables', value=json.dumps(company_earnings_tables))
+    else:
+        Variable.set(key='company_earnings_tables', value=json.dumps(company_earnings_tables))
 
 def generate_tables(**context):
     """ Generate all non template tables.
@@ -117,6 +124,7 @@ def generate_tables(**context):
     files.sort()
     failed = []
     table_names = Variable.get('table_names', {}, deserialize_json=True)
+    var_exists = len(table_names) != 0
     with pg_hook.get_conn() as pg_conn:
         cursor = pg_conn.cursor()
         for file in files:
@@ -135,7 +143,10 @@ def generate_tables(**context):
         for failure in failed:
             log.exception(failure)
         raise Exception('\n'.join(failed))
-    Variable.update(key='table_names', value=table_names)
+    if var_exists:
+        Variable.update(key='table_names', value=json.dumps(table_names))
+    else:
+        Variable.set(key='table_names', value=json.dumps(table_names))
 
 def insert_tickers_to_track(**context):
     """ Insert all tickers we want to track.
