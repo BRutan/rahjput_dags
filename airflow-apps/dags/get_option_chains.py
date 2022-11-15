@@ -68,11 +68,13 @@ def get_option_chain_and_insert(tk, ticker, engine, target_table, target_schema,
     if len(data['expirationdate']) == 0:
         log.warn(f'No option chains available for {ticker}.')
     else:
+        target_schema, target_table = target_table.split(".")
         log.info(f"Inserting into {target_table} {len(data['expirationdate'])} records.")
         data['upload_timestamp'] = [datetime.now()] * len(data['expirationdate'])
         data = pd.DataFrame(data)
-        data.to_sql(name=target_table, schema=target_schema, con=engine, if_exists='append')
+        data.to_sql(name=target_table, schema=target_schema, con=engine, if_exists='append', index=None)
     return True
+
 ###########
 # Dag:
 ###########
@@ -80,7 +82,7 @@ with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
     start_date=days_ago(1),
-    schedule="30 9 * * 1-5",
+    schedule="30 14 * * 1-5",
     max_active_tasks=30
 ) as dag:
     
