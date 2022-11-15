@@ -1,7 +1,7 @@
 from airflow.models import Variable
 from airflow.models.dag import DAG
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
 from common import get_columns_to_write, get_dag_name, get_variable_values
@@ -80,7 +80,8 @@ with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
     start_date=days_ago(1),
-    schedule="30 9 * * 1-5"
+    schedule="30 9 * * 1-5",
+    concurrency=30
 ) as dag:
     
     log = logging.getLogger()

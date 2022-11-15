@@ -2,7 +2,7 @@ from airflow.models import Variable
 from airflow.models.dag import DAG
 from airflow.models.dagrun import DagRun
 from airflow.operators.empty import EmptyOperator
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
 from common import get_and_validate_conf, get_dag_name, get_logger, get_variable_values

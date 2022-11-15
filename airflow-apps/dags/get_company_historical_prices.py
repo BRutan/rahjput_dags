@@ -5,7 +5,7 @@ from airflow.models.dagrun import DagRun
 from airflow.models.xcom import XCom
 from airflow.operators.empty import EmptyOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-from airflow.operators.python_operator import PythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.utils.session import provide_session
 from airflow.utils.dates import days_ago
 from common import get_columns_to_write, get_and_validate_conf, get_dag_name, get_variable_values, get_dag_name, get_logger
