@@ -81,7 +81,7 @@ with DAG(
     catchup=False,
     start_date=days_ago(1),
     schedule="30 9 * * 1-5",
-    concurrency=30
+    max_active_tasks=30
 ) as dag:
     
     log = logging.getLogger()
@@ -99,14 +99,12 @@ with DAG(
         
         get_variables_task = PythonOperator(task_id='get_variables',
                                         python_callable=get_variable_values, 
-                                        provide_context=True,
                                         op_kwargs={'log':log,
                                                    'variables_list' : ['option_chain_pull_interval_minutes']},
                                         dag=dag)
         
         get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',
                                                 python_callable=get_columns_to_write,
-                                                provide_context=True,
                                                 op_kwargs={'log': log, 
                                                             'table_name' : ex_table,
                                                             'conn_id': 'postgres_default'},
@@ -116,7 +114,6 @@ with DAG(
         for ticker in option_chain_tables:
             operator = PythonOperator(task_id=f'get_and_insert_option_chains_{ticker}',
                                     python_callable=get_and_insert_option_chains,
-                                    provide_context=True,
                                     op_kwargs={'log':log, 
                                                 'ticker':ticker, 
                                                 'end_time' : end_time,
