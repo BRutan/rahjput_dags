@@ -9,6 +9,11 @@ RUN apt-get install libmysqlclient-dev -y
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt install libpq-dev -y
 RUN apt install sudo
+# For setting up mail client:
+RUN apt install ufw
+RUN apt install telnet
+RUN apt-get install mailutils
+RUN apt install iproute2
 
 # Retrieve packages from Microsoft
 RUN curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add -
