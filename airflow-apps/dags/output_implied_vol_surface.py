@@ -86,7 +86,7 @@ def generate_iv_surface(**context):
     plt.xlabel("Strike")
     plt.ylabel("Days Til Expiration")
     plt.title(f"{ticker.lower()} IV Surface on {ocd.strftime('%m/%d/%y')}")
-    outpath = os.path.join(vsd, f"{ticker.lower()}_{ocd.strftime('%m_%d_%y')}.png")
+    outpath = os.path.join(vsd, f"{ticker.lower()}_iv_surface_{ocd.strftime('%m_%d_%y')}.png")
     log.info(f"Output figure to {outpath}.")
     plt.savefig(outpath)
     log.info("Ending generate_iv_surface().")
