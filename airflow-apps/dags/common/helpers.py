@@ -23,6 +23,13 @@ def is_datetime(elem):
     except:
         return False
     
+def is_float(elem):
+    try:
+        float(elem)
+        return True
+    except:
+        return False
+    
 def is_regex(elem):
     try:
         if isinstance(elem, re.compile('')):
