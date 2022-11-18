@@ -36,7 +36,7 @@ def check_params(**context):
         log.info(context["optional"])
     log.info("context: ")
     for param in context:
-        if param in context["required"] or param in context["optional"] or param in context["exclusive"]:
+        if param in context["required"] or ("optional" in context and param in context["optional"]) or ("exclusive" in context and param in context["exclusive"]):
             log.info(f"{param} : {context[param]}")
     for required in context["required"]:
         if not required in context:
