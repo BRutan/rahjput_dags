@@ -3,17 +3,139 @@
 ###############################
 # Description:
 # * 
-
-from airflow.exceptions import AirflowSkipException
-from airflow.models import Variable
-from airflow.providers.postgres.hooks.postgres import PostgresHook
-from copy import deepcopy
+from airflow.models.param import Param
+import datetime
+from dateutil.parser import parse as dtparser
 import logging
 import os
 import pandas as pd
-import psycopg2
 import re
-import sys
+from typing import Any, Dict, List, Union
+
+##################
+# Type checking:
+##################
+def is_datetime(elem):
+    try:
+        dtparser(elem)
+        return True
+    except:
+        return False
+    
+##################
+# Helpers:
+##################
+def check_conf(**context):
+    """
+    * Check parameters
+    """
+    log = context["log"]
+    log.info("Starting check_conf().")
+    errs = []
+    if not "required" in context:
+        errs.append("required missing from context.")
+    for required in context["required"]:
+        if not required in context:
+            errs.append(f"Param {required} is missing.")
+        elif len(context["required"][required]) < 2 and not isinstance(context[required], context["required"][required][0]):
+            errs.append(f"Param {required} must be of type {context['required'][required][0]}")
+        elif len(context["required"][required]) == 2 and not context["required"][required][0](context[required]):
+            errs.append(f"Param {required} does not meet condition.")
+    if "optional" in context:
+        for optional in context["optional"]:
+            if len(context["optional"][optional]) < 2 and not isinstance(context[optional], context["optional"][optional][0]):
+                errs.append(f"Param {optional} must be of type {context['optional'][optional][0]}")
+            elif len(context["optional"][optional]) == 2 and not context["optional"][optional][0](context[optional]):
+                errs.append(f"Param {optional} does not meet condition.")
+    if not errs and "exclusive" in context:
+        for num, elem in enumerate(context["exclusive"]):
+            if not elem(context):
+                errs.append(f"context params failed exclusion param {num}.")
+    if errs:
+        raise ValueError("\n".join(errs))
+    log.info("Ending check_conf().")
+    
+def get_email_subject(ticker : Union[List[str], str], content : str, context : Dict[str, Any]):
+    """
+    * Generate subject email using templated scheme.
+    Args:
+    - ticker: Ticker or tickers corresponding to data in email.
+    - content: Content email is related to. Ex: option chains
+    - context: Dictionary containing one or more of pull_date, start_date, end_date.
+    """
+    date_params = ["start_date", "end_date", "pull_date"]
+    for param in date_params:
+        if param in context and not isinstance(context[param], (datetime.datetime, datetime.date)):
+            context[param] = dtparser(context[param])
+    subject = f"{','.join(ticker) if isinstance(ticker, list) else ticker} {content}"
+    if context["pull_date"]:
+       subject += f" for date {context['pull_date'].strftime('%m/%d/%y')}"
+    elif context["start_date"] and context["end_date"]:
+         subject += f" for dates between {context['start_date'].strftime('%m/%d/%y')} and {context['end_date'].strftime('%m/%d/%y')} inclusive"
+    elif context["start_date"]:
+        subject += f" for dates after {context['start_date'].strftime('%m/%d/%y')} "
+    elif context["end_date"]:
+        subject += f" for dates before {context['end_date'].strftime('%m/%d/%y')} "
+    return subject
+         
+def get_filename(ticker : str, content : str, data : pd.DataFrame, ext : str, context : Dict[str, Any]):
+    """
+    * Apply standard filenaming schema, i.e. <ticker>_<content>_(start_<start_date>_end_<end_date>_pulldate_<pull_date>).<ext>}
+    Args:
+    - ticker: Ticker associated with data.
+    - content: Content description associated with data. Ex: option_chains
+    - data: Pulled data. Expecting 'upload_timestamp' as column corresponding to start, end or pull date.
+    - ext: File extension to apply.
+    - context: op_kwargs passed to task.
+    """
+    outpath = f"{ticker.lower()}_{content.lower()}"
+    if context["start_date"]:
+        sd = min(data['upload_timestamp'], context['start_date'])
+        outpath += f"_start_{sd.strftime('%m_%d_%y')}"
+    if context["end_date"]:
+        ed = max(data['upload_timestamp'], context['end_date'])
+        outpath += f"_end_{ed.strftime('%m_%d_%y')}"
+    if context["pull_date"] and not context["start_date"] and not context["end_date"]:
+        pd = context["pull_date"]
+        outpath += f"_on_{pd.strftime('%m_%d_%y')}"
+    outpath += f".{ext.strip('.')}"
+    return outpath
+    
+def get_date_filter_where_clause(**context):
+    """
+    * Take in date parameters, apply common filtering 
+    logic across option chain tables.
+    """
+    where_clause = []
+    date_params = ["start_date", "end_date", "pull_date"]
+    for param in date_params:
+        if context[param]:
+            context[param] = dtparser(context[param])
+    if context["start_date"] and context["end_date"]:
+        if context["start_date"] > context["end_date"]:
+            cpy = context["start_date"]
+            context["start_date"] = context["end_date"]
+            context["end_date"] = cpy
+    # Pull for date range:
+    if context["start_date"]:
+        where_clause.append(f"upload_timestamp >= '{context['start_date'].strptime('%m-%d-%y')}'")
+    if context["end_date"]:
+        where_clause.append("AND" if len(where_clause) > 0 else "")
+        where_clause.append(f"upload_timestamp <= '{context['end_date'].strptime('%m-%d-%y')}'")
+    # Pull for single date:
+    if context["pull_date"] and not context["start_date"] and not context["end_date"]:
+        dt = (context['pull_date'].month, context['pull_date'].day, context['pull_date'].year)
+        where_clause.append(f"MONTH(upload_timestamp) = {dt[0]} AND DAY(upload_timestamp) = {dt[1]} AND YEAR(upload_timestamp) = {dt[2]}")
+    if where_clause:
+        where_clause.insert(0, "WHERE")
+    
+    return " ".join(where_clause)
+
+def get_logger(filepath):
+    """
+    * Output log object.
+    """
+    return logging.getLogger(filepath)
 
 def get_firstname_lastname(name, firstName=True):
     """
@@ -159,154 +281,3 @@ def insert_pandas(data, conn, table_name, schema, log, chunksize):
         log.info('data must be a dictionary.')
     data = pd.DataFrame(data)
     data.to_sql(name=table_name,con=conn,schema=schema,if_exists='fail',chunksize=chunksize)
-        
-##############
-# Operators:
-##############
-def batch_elements(**context):
-    """
-    * Divide up items into 
-    batches. To serve as a DAG step.
-    Inputs:
-    * items
-    Returns:
-    * 
-    """
-    pass
-
-def get_logger(filepath):
-    """
-    * Output log object.
-    """
-    return logging.getLogger(filepath)
-
-def read_file(filepath):
-    """
-    * Read content from file.
-    """
-    with open(filepath, 'r') as f:
-        return f.read()
-    
-def list_str_to_list(list_str):
-    """
-    * Convert string containing list information
-    (from xcom in particular) to list.
-    """
-    elemPattern = re.compile('(?P<elem>[^\[\],]+)')
-    results = elemPattern.findall(list_str)
-    output = [result.strip('"') for result in results]
-    return output
-
-def get_variable_values(**context):
-    """
-    * Return dicionary containing all
-    variables mapped directly to the variable name.
-    Inputs:
-    * variables_list: List containing strings or tuples containing (variable_name (str), default_var (any)).
-    Returns:
-    * variable_values: Dictionary pointing {variable_name -> value}.
-    """
-    errs = []
-    log = context.get('log', None)
-    variables_list = context.get('variables_list', None)
-    if log is None:
-        errs.append('log is a required variable.')
-    if variables_list is None:
-        errs.append('variables_list is required.')
-    elif not isinstance(variables_list, list):
-        errs.append('variables_list must be a list.')
-    elif not all([isinstance(variable, (str, tuple)) for variable in variables_list]):
-        errs.append('variables_list must only contain strings or tuples.')
-    if errs:
-        raise ValueError('\n'.join(errs))
-    # Gather all variables, note which are blank if requested:
-    missing = []
-    variable_values = {}
-    for variable in variables_list:
-        value = Variable.get(variable, default_var=None)
-        if value is None:
-            missing.append(variable)
-        else:
-            variable_values[variable] = value
-    if missing:
-        msg = f'The following variables were missing: {",".join(missing)}'
-        log.warn(msg)
-        raise ValueError(msg)
-    context['ti'].xcom_push(key='variable_values', value=variable_values)
-    
-def get_tickers(**context):
-    """ Get tickers to track from table.
-    """
-    log = context['log']
-    log.info('Starting get_tickers().')
-    pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_connect = pg_hook.get_conn()
-    cursor = pg_connect.cursor()
-    variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
-    tickers_to_track_table = variable_values['tickers_to_track_table']
-    log.info('Getting tickers needed to be tracked from %s.', tickers_to_track_table)
-    tickers_to_track = cursor.execute(f'SELECT * FROM {tickers_to_track_table}')
-    context['ti'].xcom_push(key='tickers_to_track', value=tickers_to_track)
-    
-def get_columns_to_write(**context):
-    """ Get all columns to write from target table.
-    """
-    log = context['log']
-    log.info('Starting get_columns_to_write().')
-    pg_hook = PostgresHook(conn_id=context['conn_id'])
-    pg_connect = pg_hook.get_conn()
-    cursor = pg_connect.cursor()
-    table_name = context['table_name'].lower()
-    if '.' in table_name:
-        schema_name, table_name = table_name.split('.')
-    else: 
-        schema_name = context.get('schema_name', None)
-    log.info(f'Getting columns need to pull from {table_name}.')
-    query = f"SELECT column_name FROM information_schema.columns WHERE table_name='{table_name}'"
-    if schema_name is not None:
-        query += f" AND table_schema='{schema_name.lower()}'"
-    log.info(query)
-    cursor.execute(query)
-    target_columns = cursor.fetchall()
-    target_columns = [elem[0] for elem in target_columns]
-    log.info('Using columns: %s', target_columns)
-    context['ti'].xcom_push(key='columns_to_write', value=target_columns)
-    
-def get_and_validate_conf(**context):
-    """ Get and validate conf variables passed to DAG.
-    """ 
-    log = context['log']
-    conf = context['conf']
-    required = context['required']
-    optional = context.get('optional', {})
-    missing = []
-    invalid = {'name' : [], 'expected' : [], 'actual': []}
-    for var in required:
-        if not var in conf:
-            missing.append(var)
-        elif not isinstance(conf[var], required[var]):
-            invalid['name'].append(var)
-            invalid['expected'].append(str(required[var]))
-            invalid['actual'].append(str(type(conf[var])))
-    for var in optional:
-        if var in conf and not isinstance(conf[var], required[var]):
-            invalid['name'].append(var)
-            invalid['expected'].append(str(required[var]))
-            invalid['actual'].append(str(type(conf[var])))
-    errs = []
-    if missing:
-        errs.append('The following required conf inputs missing:')
-        errs.append(','.join(missing))
-    if len(invalid['name']) > 0:
-        invalid = pd.DataFrame(invalid)
-        errs.append('The following conf variables had invalid types:')
-        log.warn(errs[-1])
-        log.warn(invalid)
-        errs.append(','.join(invalid['name']))
-    if errs:
-        for err in errs:
-            log.warn(err)
-        log.warn('Invalid: ')
-        log.warn(invalid)
-        raise Exception('One or more conf errors occurred.')
-    context['ti'].xcom_push(key='conf', value=conf)

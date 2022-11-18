@@ -79,13 +79,11 @@ with DAG(
                                                            'conf' : conf,
                                                            'required':required,
                                                            'optional':optional},
-                                                provide_context=True,
                                                 dag=dag)
     
     execute_sql_task = PythonOperator(task_id='execute_sql',
                                       python_callable=execute_sql,
                                       op_kwargs={'log': log},
-                                      provide_context=True,
                                       dag=dag)
     
     
