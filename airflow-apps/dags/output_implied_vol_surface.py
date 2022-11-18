@@ -5,7 +5,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
-from common import is_datetime, is_float, get_dag_name
+from common import check_params, get_dag_name, is_datetime, is_float
 from datetime import datetime, timedelta
 from dateutil.parser import parse as dtparse
 from mpl_toolkits import mplot3d
@@ -32,8 +32,8 @@ def generate_iv_surface(**context):
     strike_pm = float(context["strike_pm"]) if context["strike_pm"] else ""
     option_type = context["option_type"].lower()
     ticker = context["ticker"].upper()
-    tickers = Variable.get("option_chains_tables", {})
-    ocd = dtparse(context["option_chain_date"])
+    tickers = Variable.get("option_chains_tables", {}, deserialize_json=True)
+    ocd = dtparse(context["option_chains_date"])
     vsd = Variable.get("volatility_surfaces_dir")
     if not os.path.exists(vsd):
         log.info(f"Making implied volatility surfaces directory at {vsd}.")
@@ -49,12 +49,14 @@ def generate_iv_surface(**context):
     log.info("Getting data.")
     results = pd.DataFrame()
     with pg_hook.get_conn() as conn:
-        query = ["SELECT DATE_PART('day', expirationdate - timestamp) AS days_til_expiry, strike, AVG(impliedvolatility) as impliedvolatility"]
+        query = ["WITH has_dte AS ("]
+        query.append("SELECT DATE_PART('day', expirationdate - upload_timestamp) AS days_til_expiry, strike, impliedvolatility as impliedvolatility")
         query.append(f"FROM {option_chain_table} WHERE iscall = {True if option_type.lower() == 'calls' else False} ")
         if strike_pm:
             query.append("AND moneyness BETWEEN -{strike_pm} AND {strike_pm}")
-        query.append(f"AND MONTH(upload_timestamp) = {ocd.month} AND DAY(upload_timestamp) = {ocd.day} AND YEAR(upload_timestamp) = {ocd.year}")
-        query.append("GROUP BY MONTH(upload_timestamp), DAY(upload_timestamp), YEAR(upload_timestamp)")
+        query.append(f"AND EXTRACT(MONTH FROM upload_timestamp) = {ocd.month} AND EXTRACT(DAY FROM upload_timestamp) = {ocd.day} AND EXTRACT(YEAR FROM upload_timestamp) = {ocd.year})")
+        query.append("SELECT days_til_expiry, strike, AVG(impliedvolatility) AS impliedvolatility")
+        query.append("FROM has_dte GROUP BY days_til_expiry, strike")
         query = "\n".join(query)
         log.info("Full query: ")
         log.info(query)
@@ -122,9 +124,12 @@ with DAG(
     op_kwargs["optional"] = {"strike_pm" : (str, lambda x : is_float(x) and x > 0)}
     start = EmptyOperator(task_id="start")
     
+    check_params_task = PythonOperator(task_id="check_params",
+                                       python_callable=check_params,
+                                       op_kwargs=op_kwargs)
     generate_iv_surface_task = PythonOperator(task_id="generate_iv_surface",
                                               python_callable=generate_iv_surface,
                                               op_kwargs=op_kwargs)   
 
-    start >> generate_iv_surface_task
+    start >> check_params_task >> generate_iv_surface_task
     
