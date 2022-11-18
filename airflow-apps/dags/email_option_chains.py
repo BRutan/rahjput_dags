@@ -144,9 +144,10 @@ with DAG(
                                             op_kwargs=op_kwargs,
                                             python_callable=pull_option_chains)
     try:
-        filepaths = json.loads("{ ti.xcom_pull(task_ids='pull_option_chains', key='filepaths') }")
+        filepaths = json.loads("{{ ti.xcom_pull(task_ids='pull_option_chains', key='filepaths') }}")
     except:
         filepaths = ""
+        
     subject = get_email_subject(op_kwargs["tickers"], "option chains", op_kwargs)
     email_option_chain_task = EmailOperator(task_id="email_option_chains",
                                             to=Variable.get("key_persons_email").split(","),

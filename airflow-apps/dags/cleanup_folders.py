@@ -4,7 +4,7 @@ from airflow.models.variable import Variable
 from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.utils.db import create_session
-from common import cleanup_files, get_dag_name
+from common import check_params, cleanup_files, get_dag_name, is_regex
 from datetime import datetime
 import json
 import logging
@@ -57,14 +57,20 @@ with DAG(
     
     op_kwargs = {}
     op_kwargs["log"] = log
+    op_kwargs["fileregex"] = "{{ params.fileregex }}"
+    op_kwargs["optional"] = {"fileregex" : (str, is_regex) }
     
     start = EmptyOperator(task_id="start")
+    
+    check_params_task = PythonOperator(task_id="check_params",
+                                       op_kwargs=op_kwargs,
+                                       python_callable=check_params)
     
     get_all_variable_filepaths_task = PythonOperator(task_id="get_all_variable_filepaths",
                                                       op_kwargs=op_kwargs,
                                                       python_callable=get_all_variable_filepaths)
     try:
-        filepaths = json.loads("{ ti.xcom_pull(task_ids='get_all_variable_filepaths', key='filepaths') }")
+        filepaths = json.loads("{{ ti.xcom_pull(task_ids='get_all_variable_filepaths', key='filepaths') }}")
     except:
         filepaths = ""
         

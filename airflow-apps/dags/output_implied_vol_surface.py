@@ -16,6 +16,7 @@ from matplotlib import cm
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import pandas as pd
 import sys
 
 ##################
@@ -30,7 +31,7 @@ def generate_iv_surface(**context):
     log.info("Starting generate_iv_surface().")
     strike_pm = context["strike_pm"]
     option_type = context["option_type"]
-    ticker = context["ticker"]
+    ticker = context["ticker"].upper()
     vsd = Variable.get("volatility_surfaces_dir")
     vsd = vsd.format_map({"<ticker>" : ticker.lower()})
     if not os.path.exists(vsd):
@@ -42,18 +43,19 @@ def generate_iv_surface(**context):
     option_chain_table = tickers[ticker]
     pg_hook = PostgresHook(conn_id = context["conn_id"])
     log.info("Getting data.")
-    results = None
+    results = pd.DataFrame()
     with pg_hook.get_conn() as conn:
-        cursor = conn.cursor()
         query = ["SELECT DATE_PART('day', expirationdate - timestamp) AS days_til_expiry, strike, AVG(impliedvolatility) as impliedvolatility"]
         query.append(f"FROM {option_chain_table} WHERE iscall = {True if option_type.lower() == 'call' else False} ")
-        query.append(" AND percentatm BETWEEN -{strike_pm} AND {strike_pm}")
-        query.append(f" AND MONTH(upload_timestamp) = {ocd.month} AND DAY(upload_timestamp) = {ocd.day} AND YEAR(upload_timestamp) = {ocd.year}")
-        query.append(" GROUP BY MONTH(upload_timestamp), DAY(upload_timestamp), YEAR(upload_timestamp)")
-        cursor.execute(" ".join(query))
-        results = cursor.fetchall()
-    if not results:
-        log.info("No data for {ocd}. Skipping surface generation.")
+        query.append("AND percentatm BETWEEN -{strike_pm} AND {strike_pm}")
+        query.append(f"AND MONTH(upload_timestamp) = {ocd.month} AND DAY(upload_timestamp) = {ocd.day} AND YEAR(upload_timestamp) = {ocd.year}")
+        query.append("GROUP BY MONTH(upload_timestamp), DAY(upload_timestamp), YEAR(upload_timestamp)")
+        query = "\n".join(query)
+        log.info("Full query: ")
+        log.info(query)
+        results = pd.read_sql(sql=query, con=conn)
+    if len(results) == 0:
+        log.info(f"No data for {ocd}. Skipping surface generation.")
         return
     days_til_expiry = []
     days_til_expiry_extended = []
@@ -73,6 +75,7 @@ def generate_iv_surface(**context):
     days_til_expiry_extended = list(chain(*days_til_expiry_extended))
     implied_vols = list(chain(*implied_vols))
     # Generate surface:
+    plt.clf()
     fig = plt.figure(figsize=(7,7))
     axs = plt.axes(projection="3d")
     # use plot_trisurf from mplot3d to plot surface and cm for color scheme
@@ -101,7 +104,9 @@ with DAG(
     
     log = logging.getLogger()
     log.setLevel(logging.INFO)
-    
+    op_kwargs = {"log" : log}
+    op_kwargs["required"] = {"ticker" : (str, lambda ticker : ticker.upper() in Variable.get("option_chains_tables")), "option_chain_date" : (str, is_datetime)}
+    op_kwargs["optional"] = {"strike_pm" : (float, lambda x : x > 0)}
     start = EmptyOperator(task_id="start")
     
     generate_iv_surface_task = PythonOperator(task_id="generate_iv_surface",
