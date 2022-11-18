@@ -108,52 +108,56 @@ with DAG(
     start_date=datetime.now(),
     catchup=False,
     schedule="@once",
-    params= {"tickers" : Param(type="string", description="Tickers to pull. Must have table present."),
+    params= {"tickers" : Param(type="string", default="", description="Tickers to pull. Must have table present."),
              "pull_date" : Param(type="string", default="", description="Day to pull, corresponding to upload_timestamp."),
              "start_date" : Param(type="string", default="", description="Start date to pull option chains."),
              "end_date" : Param(type="string", default="", description="End date to pull option chains.")}
 ) as dag:
     
-    log = logging.getLogger()
-    log.setLevel(logging.INFO)
+    op_kwargs = dag.params
     
-    start = EmptyOperator(task_id="start", 
-                          dag=dag)
-    op_kwargs = dag.conf
-    op_kwargs["log"] = log
-    op_kwargs["conn_id"] = "postgres_default"
-    
-    required = {"tickers" : (str, lambda tickers : all([ticker in Variable.get("option_chains_tables", {}) for ticker in tickers.split(",")]))}
-    optional = {"pull_date" : (str, is_datetime), "start_date" : (str, is_datetime), "end_date" : (str, is_datetime)}
-    exclusive = [lambda x : not all([not x['pull_date'], not x['start_date'], not x['end_date']])]
-    op_kwargs["required"] = required
-    op_kwargs["optional"] = optional
-    op_kwargs["exclusive"] = exclusive
-    
-    
-    check_conf_task = PythonOperator(task_id="check_conf",
-                                       op_kwargs=op_kwargs,
-                                       python_callable=check_conf,
-                                       dag=dag)
-    
-    
-    pull_option_chains_task = PythonOperator(task_id="pull_option_chains",
-                                       op_kwargs=op_kwargs,
-                                       python_callable=pull_option_chains,
-                                       dag=dag)
-    
-    subject = get_email_subject(op_kwargs["tickers"], "option chains", op_kwargs)
-    filepaths = json.loads("{{ ti.filepaths }}")
-    email_option_chain_task = EmailOperator(task_id="email_option_chains",
-                                            to=Variable.get("key_persons_email").split(","),
-                                            subject=subject,
-                                            files=filepaths,
-                                            dag=dag)
-    
-    cleanup_files_task = PythonOperator(task_id="cleanup_files",
-                                        op_kwargs={"log" : log,
-                                                   "filepaths" : filepaths},
-                                        python_callable=cleanup_files,
+    if op_kwargs["tickers"] and any([op_kwargs["pull_date"], op_kwargs["start_date"], op_kwargs["end_date"]]):
+        
+        log = logging.getLogger()
+        log.setLevel(logging.INFO)
+        
+        op_kwargs["log"] = log
+        op_kwargs["conn_id"] = "postgres_default"
+        
+        start = EmptyOperator(task_id="start", 
+                            dag=dag)
+        
+        
+        required = {"tickers" : (str, lambda tickers : all([ticker in Variable.get("option_chains_tables", {}) for ticker in tickers.split(",")]))}
+        optional = {"pull_date" : (str, is_datetime), "start_date" : (str, is_datetime), "end_date" : (str, is_datetime)}
+        exclusive = [lambda x : not all([not x['pull_date'], not x['start_date'], not x['end_date']])]
+        op_kwargs["required"] = required
+        op_kwargs["optional"] = optional
+        op_kwargs["exclusive"] = exclusive
+        
+        check_conf_task = PythonOperator(task_id="check_conf",
+                                        op_kwargs=op_kwargs,
+                                        python_callable=check_conf,
                                         dag=dag)
-    
-    start >> check_conf_task >> pull_option_chains_task >> email_option_chain_task >> cleanup_files_task
+        
+        
+        pull_option_chains_task = PythonOperator(task_id="pull_option_chains",
+                                        op_kwargs=op_kwargs,
+                                        python_callable=pull_option_chains,
+                                        dag=dag)
+        
+        subject = get_email_subject(op_kwargs["tickers"], "option chains", op_kwargs)
+        filepaths = json.loads("{{ ti.filepaths }}")
+        email_option_chain_task = EmailOperator(task_id="email_option_chains",
+                                                to=Variable.get("key_persons_email").split(","),
+                                                subject=subject,
+                                                files=filepaths,
+                                                dag=dag)
+        
+        cleanup_files_task = PythonOperator(task_id="cleanup_files",
+                                            op_kwargs={"log" : log,
+                                                    "filepaths" : filepaths},
+                                            python_callable=cleanup_files,
+                                            dag=dag)
+        
+        start >> check_conf_task >> pull_option_chains_task >> email_option_chain_task >> cleanup_files_task
