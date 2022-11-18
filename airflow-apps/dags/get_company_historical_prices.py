@@ -106,9 +106,9 @@ with DAG(
     catchup=False,
     start_date=datetime.now(),
     schedule=None,
-    params = {"tickers" : Param(type="string", description="Ticker to pull prices."),
-              "start_date" : Param(type="string", description="Start date for data pull."),
-              "end_date" : Param(type="string", description="End date for data pull.")},
+    params = {"tickers" : Param(type="string", default="", description="Ticker to pull prices."),
+              "start_date" : Param(type="string", default="", description="Start date for data pull."),
+              "end_date" : Param(type="string", default="", description="End date for data pull.")},
     render_template_as_native_obj=True
 ) as dag:
     
@@ -119,7 +119,7 @@ with DAG(
     op_kwargs["tickers"] = "{{ params.tickers }}"
     op_kwargs["start_date"] = "{{ params.start_date }}"
     op_kwargs["end_date"] = "{{ params.end_date }}"
-    op_kwargs["required"] = {"tickers" : (str, ), "start_date" : (str, is_datetime), "end_date" : (str, is_datetime)}
+    op_kwargs["required"] = {"tickers" : (str, lambda ticker: len(ticker.strip()) > 0 ), "start_date" : (str, is_datetime), "end_date" : (str, is_datetime)}
     
     start_task = EmptyOperator(task_id='start', dag=dag)
     

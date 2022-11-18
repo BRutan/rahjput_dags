@@ -50,7 +50,7 @@ def generate_iv_surface(**context):
     results = pd.DataFrame()
     with pg_hook.get_conn() as conn:
         query = ["SELECT DATE_PART('day', expirationdate - timestamp) AS days_til_expiry, strike, AVG(impliedvolatility) as impliedvolatility"]
-        query.append(f"FROM {option_chain_table} WHERE iscall = {True if option_type.lower() == 'call' else False} ")
+        query.append(f"FROM {option_chain_table} WHERE iscall = {True if option_type.lower() == 'calls' else False} ")
         if strike_pm:
             query.append("AND moneyness BETWEEN -{strike_pm} AND {strike_pm}")
         query.append(f"AND MONTH(upload_timestamp) = {ocd.month} AND DAY(upload_timestamp) = {ocd.day} AND YEAR(upload_timestamp) = {ocd.year}")
@@ -102,9 +102,11 @@ with DAG(
     schedule=None,
     max_active_tasks=30,
     render_template_as_native_obj=True,
-    params = {"ticker" : Param(type="string", description="Single ticker to pull implied volatility for."),
-              "option_chains_date" : Param(type="string", description="Market price date from which to generate surface."),
-              "strike_pm" : Param(type="string", default = "", description="Strike % +/- from ATM to generate surface. If skipped then does for all strikes. Must be positive floating point.")}
+    params = {"ticker" : Param("", type="string", description="Single ticker to pull implied volatility for."),
+              "option_chains_date" : Param("", type="string", description="Market price date from which to generate surface."),
+              "option_type" : Param("calls", type="string", description="Put calls if want calls, puts if puts."),
+              # Optional
+              "strike_pm" : Param("", type="string", description="Strike % +/- from ATM to generate surface. If skipped then does for all strikes. Must be positive floating point.")}
     ) as dag:
     
     log = logging.getLogger()
@@ -115,7 +117,7 @@ with DAG(
     op_kwargs["option_chains_date"] = "{{ params.option_chains_date }}"
     op_kwargs["conn_id"] ="postgres_default"
     op_kwargs["log"] = log
-    op_kwargs["required"] = {"ticker" : (str, lambda ticker : ticker.upper() in Variable.get("option_chains_tables")), "option_chains_date" : (str, is_datetime)}
+    op_kwargs["required"] = {"ticker" : (str, lambda ticker : ticker.upper() in Variable.get("option_chains_tables")), "option_chains_date" : (str, is_datetime), "option_type" : (str, lambda x : x in ["calls", "puts"])}
     op_kwargs["optional"] = {"strike_pm" : (str, lambda x : is_float(x) and x > 0)}
     start = EmptyOperator(task_id="start")
     

@@ -87,10 +87,10 @@ with DAG(
     start_date=datetime.now(),
     catchup=False,
     schedule="@once",
-    params= {"ticker" : Param(type="string"),
-             "start_date" : Param(type="string"),
-             "end_date" : Param(type="string"),
-             "output_folder" : Param(type="string"),
+    params= {"ticker" : Param("", type="string"),
+             "start_date" : Param("", type="string"),
+             "end_date" : Param("", type="string"),
+             "output_folder" : Param("", type="string"),
              # Optional:
              "freq" : Param(type="string", default="d", description="Data frequency. Must be in ['d','w','m','y']."),
              "strike" : Param(type="string", default="")}
