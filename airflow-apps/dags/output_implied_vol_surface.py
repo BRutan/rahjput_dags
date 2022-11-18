@@ -102,9 +102,9 @@ with DAG(
     schedule=None,
     max_active_tasks=30,
     render_template_as_native_obj=True,
-    params = {"ticker" : Param("ticker", type="string", description="Single ticker to pull implied volatility for."),
-              "option_chains_date" : Param("option_chains_date", type="string", description="Market price date from which to generate surface."),
-              "strike_pm" : Param("strike_param", type="string", default = "", description="Strike % +/- from ATM to generate surface. If skipped then does for all strikes. Must be positive floating point.")}
+    params = {"ticker" : Param(type="string", description="Single ticker to pull implied volatility for."),
+              "option_chains_date" : Param(type="string", description="Market price date from which to generate surface."),
+              "strike_pm" : Param(type="string", default = "", description="Strike % +/- from ATM to generate surface. If skipped then does for all strikes. Must be positive floating point.")}
     ) as dag:
     
     log = logging.getLogger()

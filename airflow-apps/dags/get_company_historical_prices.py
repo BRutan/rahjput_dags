@@ -106,9 +106,9 @@ with DAG(
     catchup=False,
     start_date=datetime.now(),
     schedule=None,
-    params = {"tickers" : Param("ticker", type="string", description="Ticker to pull prices."),
-              "start_date" : Param("start_date", type="string", description="Start date for data pull."),
-              "end_date" : Param("end_date", type="string", description="End date for data pull.")},
+    params = {"tickers" : Param(type="string", description="Ticker to pull prices."),
+              "start_date" : Param(type="string", description="Start date for data pull."),
+              "end_date" : Param(type="string", description="End date for data pull.")},
     render_template_as_native_obj=True
 ) as dag:
     
