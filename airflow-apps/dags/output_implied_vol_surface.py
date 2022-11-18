@@ -30,7 +30,7 @@ def generate_iv_surface(**context):
     log = context["log"]
     log.info("Starting generate_iv_surface().")
     strike_pm = float(context["strike_pm"]) if context["strike_pm"] else ""
-    option_type = context["option_type"]
+    option_type = context["option_type"].lower()
     ticker = context["ticker"].upper()
     tickers = Variable.get("option_chains_tables", {})
     ocd = dtparse(context["option_chain_date"])
@@ -113,8 +113,9 @@ with DAG(
     log.setLevel(logging.INFO)
     op_kwargs = {"log" : log}
     op_kwargs["ticker"] = "{{ params.ticker }}"
-    op_kwargs["strike_pm"] = "{{ params.strike_pm }}"
     op_kwargs["option_chains_date"] = "{{ params.option_chains_date }}"
+    op_kwargs["option_type"] = "{{ params.option_type }}"
+    op_kwargs["strike_pm"] = "{{ params.strike_pm }}"
     op_kwargs["conn_id"] ="postgres_default"
     op_kwargs["log"] = log
     op_kwargs["required"] = {"ticker" : (str, lambda ticker : ticker.upper() in Variable.get("option_chains_tables")), "option_chains_date" : (str, is_datetime), "option_type" : (str, lambda x : x in ["calls", "puts"])}
