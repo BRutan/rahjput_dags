@@ -3,6 +3,7 @@
 ###############################
 # Description:
 # * 
+from airflow.exceptions import AirflowFailException
 from airflow.models.param import Param
 import datetime
 from dateutil.parser import parse as dtparser
@@ -25,15 +26,26 @@ def is_datetime(elem):
 ##################
 # Helpers:
 ##################
-def check_conf(**context):
+def check_params(**context):
     """
     * Check parameters
     """
     log = context["log"]
-    log.info("Starting check_conf().")
+    log.info("Starting check_params().")
+    log.info("Checking the following params:")
     errs = []
     if not "required" in context:
         errs.append("required missing from context.")
+    else:
+        log.info("required:")
+        log.info(context["required"])
+    if "optional" in context:
+        log.info("optional:")
+        log.info(context["optional"])
+    log.info("context: ")
+    for param in context:
+        if param in context["required"] or param in context["optional"] or param in context["exclusive"]:
+            log.info(f"{param} : {context[param]}")
     for required in context["required"]:
         if not required in context:
             errs.append(f"Param {required} is missing.")
@@ -43,6 +55,8 @@ def check_conf(**context):
             errs.append(f"Param {required} does not meet condition.")
     if "optional" in context:
         for optional in context["optional"]:
+            if not(optional in context and context[optional]):
+                continue
             if len(context["optional"][optional]) < 2 and not isinstance(context[optional], context["optional"][optional][0]):
                 errs.append(f"Param {optional} must be of type {context['optional'][optional][0]}")
             elif len(context["optional"][optional]) == 2 and not context["optional"][optional][0](context[optional]):
@@ -52,8 +66,8 @@ def check_conf(**context):
             if not elem(context):
                 errs.append(f"context params failed exclusion param {num}.")
     if errs:
-        raise ValueError("\n".join(errs))
-    log.info("Ending check_conf().")
+        raise AirflowFailException("\n".join(errs))
+    log.info("Ending check_params().")
     
 def get_email_subject(ticker : Union[List[str], str], content : str, context : Dict[str, Any]):
     """
@@ -65,16 +79,16 @@ def get_email_subject(ticker : Union[List[str], str], content : str, context : D
     """
     date_params = ["start_date", "end_date", "pull_date"]
     for param in date_params:
-        if param in context and not isinstance(context[param], (datetime.datetime, datetime.date)):
+        if param in context and not isinstance(context[param], (datetime.datetime, datetime.date)) and is_datetime(context[param]):
             context[param] = dtparser(context[param])
     subject = f"{','.join(ticker) if isinstance(ticker, list) else ticker} {content}"
-    if context["pull_date"]:
+    if context["pull_date"] and is_datetime(context["pull_date"]):
        subject += f" for date {context['pull_date'].strftime('%m/%d/%y')}"
-    elif context["start_date"] and context["end_date"]:
+    elif context["start_date"] and context["end_date"] and is_datetime(context["start_date"]) and is_datetime(context["end_date"]):
          subject += f" for dates between {context['start_date'].strftime('%m/%d/%y')} and {context['end_date'].strftime('%m/%d/%y')} inclusive"
-    elif context["start_date"]:
+    elif context["start_date"] and is_datetime(context["start_date"]):
         subject += f" for dates after {context['start_date'].strftime('%m/%d/%y')} "
-    elif context["end_date"]:
+    elif context["end_date"] and is_datetime(context["end_date"]):
         subject += f" for dates before {context['end_date'].strftime('%m/%d/%y')} "
     return subject
          
@@ -88,12 +102,16 @@ def get_filename(ticker : str, content : str, data : pd.DataFrame, ext : str, co
     - ext: File extension to apply.
     - context: op_kwargs passed to task.
     """
+    date_params = ["start_date", "end_date", "pull_date"]
+    for param in date_params:
+        if param in context and not isinstance(context[param], (datetime.datetime, datetime.date)) and is_datetime(context[param]):
+            context[param] = dtparser(context[param])
     outpath = f"{ticker.lower()}_{content.lower()}"
     if context["start_date"]:
-        sd = min(data['upload_timestamp'], context['start_date'])
+        sd = max(max(data['upload_timestamp']), context['start_date'])
         outpath += f"_start_{sd.strftime('%m_%d_%y')}"
     if context["end_date"]:
-        ed = max(data['upload_timestamp'], context['end_date'])
+        ed = min(min(data['upload_timestamp']), context['end_date'])
         outpath += f"_end_{ed.strftime('%m_%d_%y')}"
     if context["pull_date"] and not context["start_date"] and not context["end_date"]:
         pd = context["pull_date"]
@@ -109,21 +127,21 @@ def get_date_filter_where_clause(**context):
     where_clause = []
     date_params = ["start_date", "end_date", "pull_date"]
     for param in date_params:
-        if context[param]:
+        if param in context and context[param]:
             context[param] = dtparser(context[param])
-    if context["start_date"] and context["end_date"]:
+    if "start_date" in context and context["start_date"] and "end_date" in context and context["end_date"]:
         if context["start_date"] > context["end_date"]:
             cpy = context["start_date"]
             context["start_date"] = context["end_date"]
             context["end_date"] = cpy
     # Pull for date range:
-    if context["start_date"]:
-        where_clause.append(f"upload_timestamp >= '{context['start_date'].strptime('%m-%d-%y')}'")
-    if context["end_date"]:
+    if "start_date" in context and context["start_date"]:
+        where_clause.append(f"upload_timestamp >= '{context['start_date'].strftime('%m-%d-%y')}'")
+    if "end_date" in context and context["end_date"]:
         where_clause.append("AND" if len(where_clause) > 0 else "")
-        where_clause.append(f"upload_timestamp <= '{context['end_date'].strptime('%m-%d-%y')}'")
+        where_clause.append(f"upload_timestamp <= '{context['end_date'].strftime('%m-%d-%y')}'")
     # Pull for single date:
-    if context["pull_date"] and not context["start_date"] and not context["end_date"]:
+    if "pull_date" in context and context["pull_date"] and not context["start_date"] and not context["end_date"]:
         dt = (context['pull_date'].month, context['pull_date'].day, context['pull_date'].year)
         where_clause.append(f"MONTH(upload_timestamp) = {dt[0]} AND DAY(upload_timestamp) = {dt[1]} AND YEAR(upload_timestamp) = {dt[2]}")
     if where_clause:

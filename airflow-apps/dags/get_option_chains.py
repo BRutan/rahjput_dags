@@ -17,7 +17,7 @@ import time
 ##############
 def get_and_insert_option_chains(**context)-> None:
     """Get option chain for single ticker and insert into postgres database.
-    Perform every interval specified in "option_chain_pull_interval_minutes" variable. 
+    Perform every interval specified in "option_chains_pull_interval_minutes" variable. 
     """
     variable_values = context['ti'].xcom_pull(task_ids='get_variables', key='variable_values')
     columns_to_write = context['ti'].xcom_pull(task_ids='get_columns_to_write', key='columns_to_write')
@@ -29,7 +29,7 @@ def get_and_insert_option_chains(**context)-> None:
     pg_hook = PostgresHook(conn_id=context['conn_id'])
     engine = pg_hook.get_sqlalchemy_engine()
     columns_to_write = set(columns_to_write) - set(['expirationdate', 'iscall', 'upload_timestamp'])
-    interval_mins = int(variable_values['option_chain_pull_interval_minutes'])
+    interval_mins = int(variable_values['option_chains_pull_interval_minutes'])
     tk = yfinance.Ticker(ticker)  
     log.info(f'Pulling data for {ticker} every {interval_mins} minutes. Ending at {str(end_time)}.')
     params = (tk, ticker, engine, target_table, target_schema, columns_to_write, log, end_time)
