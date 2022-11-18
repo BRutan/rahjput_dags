@@ -1,4 +1,4 @@
-from airflow.exceptions import AirflowFailException, AirflowSkipException
+from airflow.exceptions import AirflowFailException
 from airflow.models.dag import DAG
 from airflow.models.param import Param
 from airflow.models.variable import Variable
@@ -7,7 +7,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
-from common import get_email_subject, get_date_filter_where_clause, get_filename, is_datetime, get_dag_name
+from common import check_params, get_date_filter_where_clause, get_filename, is_datetime, get_dag_name
 from copy import deepcopy
 from datetime import datetime
 import json
@@ -18,50 +18,7 @@ import pandas as pd
 ##################
 # Operators:
 ##################
-def check_params(**context):
-    """
-    * Check parameters
-    """
-    log = context["log"]
-    log.info("Starting check_params().")
-    log.info("Checking the following params:")
-    errs = []
-    if not "required" in context:
-        errs.append("required missing from context.")
-    else:
-        log.info("required:")
-        log.info(context["required"])
-    if "optional" in context:
-        log.info("optional:")
-        log.info(context["optional"])
-    log.info("context: ")
-    for param in context:
-        if param in context["required"] or param in context["optional"] or param in context["exclusive"]:
-            log.info(f"{param} : {context[param]}")
-    for required in context["required"]:
-        if not required in context:
-            errs.append(f"Param {required} is missing.")
-        elif len(context["required"][required]) < 2 and not isinstance(context[required], context["required"][required][0]):
-            errs.append(f"Param {required} must be of type {context['required'][required][0]}")
-        elif len(context["required"][required]) == 2 and not context["required"][required][0](context[required]):
-            errs.append(f"Param {required} does not meet condition.")
-    if "optional" in context:
-        for optional in context["optional"]:
-            if not(optional in context and context[optional]):
-                continue
-            if len(context["optional"][optional]) < 2 and not isinstance(context[optional], context["optional"][optional][0]):
-                errs.append(f"Param {optional} must be of type {context['optional'][optional][0]}")
-            elif len(context["optional"][optional]) == 2 and not context["optional"][optional][0](context[optional]):
-                errs.append(f"Param {optional} does not meet condition.")
-    if not errs and "exclusive" in context:
-        for num, elem in enumerate(context["exclusive"]):
-            if not elem(context):
-                errs.append(f"context params failed exclusion param {num}.")
-    if errs:
-        raise AirflowFailException("\n".join(errs))
-    log.info("Ending check_params().")
-    
-def pull_option_chains(**context):
+def pull_and_output_option_chains(**context):
     """
     * Pull option chains from sql instance and
     output to file.
@@ -146,30 +103,14 @@ with DAG(
     op_kwargs["optional"] = optional
     op_kwargs["exclusive"] = exclusive
     
-
     start = EmptyOperator(task_id="start")
     
     check_params_task = PythonOperator(task_id="check_params",
                                        op_kwargs=op_kwargs,
                                        python_callable=check_params)
     
-    pull_option_chains_task = PythonOperator(task_id="pull_option_chains",
-                                            op_kwargs=op_kwargs,
-                                            python_callable=pull_option_chains)
-    try:
-        filepaths = json.loads("{ ti.xcom_pull(task_ids='pull_option_chains', key='filepaths') }")
-    except:
-        filepaths = ""
-    subject = get_email_subject(op_kwargs["tickers"], "option chains", op_kwargs)
-    email_option_chain_task = EmailOperator(task_id="email_option_chains",
-                                            to=Variable.get("key_persons_email").split(","),
-                                            subject=subject,
-                                            html_content="See attached.",
-                                            files=filepaths)
-    
-    cleanup_files_task = PythonOperator(task_id="cleanup_files",
-                                        op_kwargs={"log" : log,
-                                                   "filepaths" : filepaths},
-                                        python_callable=cleanup_files)
+    pull_and_output_option_chains_task = PythonOperator(task_id="pull_and_output_option_chains",
+                                                        op_kwargs=op_kwargs,
+                                                        python_callable=pull_and_output_option_chains)
         
-    start >> check_params_task >> pull_option_chains_task >> email_option_chain_task >> cleanup_files_task
+    start >> check_params_task >> pull_and_output_option_chains_task
