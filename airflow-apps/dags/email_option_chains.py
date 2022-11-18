@@ -7,7 +7,7 @@ from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
-from common import get_email_subject, get_date_filter_where_clause, get_filename, is_datetime, get_dag_name
+from common import cleanup_files, get_email_subject, get_date_filter_where_clause, get_filename, is_datetime, get_dag_name
 from copy import deepcopy
 from datetime import datetime
 import json
@@ -73,10 +73,10 @@ def pull_option_chains(**context):
     log.info("Setting date filter.")
     where_clause = get_date_filter_where_clause(**context)
     log.info(f"Date filter: {where_clause}")
-    option_chains_table_outdir = Variable.get("option_chains_table_outdir")
-    if not os.path.exists(option_chains_table_outdir):
-        log.info(f"Creating option_chain_table_outdir since not exists at {option_chains_table_outdir}.")
-        os.mkdir(option_chains_table_outdir)
+    option_chains_table_out_dir = Variable.get("option_chains_table_out_dir")
+    if not os.path.exists(option_chains_table_out_dir):
+        log.info(f"Creating option_chain_table_outdir since not exists at {option_chains_table_out_dir}.")
+        os.mkdir(option_chains_table_out_dir)
     # Pull all columns for all passed tickers and output to file:
     log.info("Starting data pull.")
     filepaths = []
@@ -92,25 +92,12 @@ def pull_option_chains(**context):
             log.info(f"Retrieved {len(data)} results.")
             # Write file:
             outpath = get_filename(ticker.lower(), 'option_chains', data, '.csv', context)
-            filepath = os.path.join(option_chains_table_outdir, outpath)
+            filepath = os.path.join(option_chains_table_out_dir, outpath)
             log.info(f"Writing data to {filepath}.")
             data.to_csv(filepath)
             filepaths.append(filepath)
     log.info("Ending pull_option_chains().")
     context["ti"].xcom_push(key="filepaths", value=filepaths)
-    
-def cleanup_files(**context):
-    """
-    * Remove output files.
-    """
-    log = context["log"]
-    filepaths = context["filepaths"]
-    log.info("Starting cleanup_files().")
-    log.info(f"Deleting {len(filepaths)} after sending in email.")
-    for filepath in filepaths:
-        log.info(f"filepath: {filepath}")
-        os.rmdir(filepath)
-    log.info("Ending cleanup_files().")
     
 ###################
 # Dag :

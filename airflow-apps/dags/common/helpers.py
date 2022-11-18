@@ -23,9 +23,37 @@ def is_datetime(elem):
     except:
         return False
     
+def is_regex(elem):
+    try:
+        if isinstance(elem, re.compile('')):
+            return True
+        re.compile(elem)
+        return True
+    except:
+        return False
+    
 ##################
 # Helpers:
 ##################
+def cleanup_files(**context):
+    """
+    * Remove output files.
+    """
+    log = context["log"]
+    filepaths = context["filepaths"]
+    pattern = context.get("fileregex", None)
+    if pattern and is_regex(pattern):
+        pattern = re.compile(pattern)
+    log.info("Starting cleanup_files().")
+    log.info(f"Deleting {len(filepaths)} files.")
+    for filepath in filepaths:
+        if not pattern is None and not pattern.match(filepath):
+            log.info(f"Skipping since filepath {filepath} matches pattern {pattern.pattern}.")
+            continue
+        log.info(f"filepath: {filepath}")
+        os.remove(filepath)
+    log.info("Ending cleanup_files().")
+    
 def check_params(**context):
     """
     * Check parameters
