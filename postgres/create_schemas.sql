@@ -1,1 +1,2 @@
 CREATE SCHEMA IF NOT EXISTS rahjput_data;
+CREATE SCHEMA IF NOT EXISTS sports_data;

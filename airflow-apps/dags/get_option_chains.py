@@ -102,7 +102,7 @@ with DAG(
         get_variables_task = PythonOperator(task_id='get_variables',
                                         python_callable=get_variable_values, 
                                         op_kwargs={'log':log,
-                                                   'variables_list' : ['option_chain_pull_interval_minutes']},
+                                                   'variables_list' : ['option_chains_pull_interval_minutes']},
                                         dag=dag)
         
         get_columns_to_write_task = PythonOperator(task_id='get_columns_to_write',

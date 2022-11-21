@@ -50,13 +50,13 @@ def generate_iv_surface(**context):
     results = pd.DataFrame()
     with pg_hook.get_conn() as conn:
         query = ["WITH has_dte AS ("]
-        query.append("SELECT DATE_PART('day', expirationdate - upload_timestamp) AS days_til_expiry, strike, impliedvolatility * 100 as impliedvolatility")
+        query.append("SELECT DATE_PART('day', expirationdate - upload_timestamp) AS days_til_expiry, strike, ask - bid as liquidity")
         query.append(f"FROM {option_chain_table} WHERE iscall = {True if option_type.lower() == 'calls' else False} ")
         if strike_pm:
             query.append("AND moneyness BETWEEN -{strike_pm} AND {strike_pm}")
         query.append(f"AND EXTRACT(MONTH FROM upload_timestamp) = {ocd.month} AND EXTRACT(DAY FROM upload_timestamp) = {ocd.day} AND EXTRACT(YEAR FROM upload_timestamp) = {ocd.year})")
         query.append("SELECT days_til_expiry, strike, AVG(impliedvolatility) AS impliedvolatility")
-        query.append("FROM has_dte GROUP BY days_til_expiry, strike ORDER BY days_til_expiry DESC, strike DESC")
+        query.append("FROM has_dte GROUP BY days_til_expiry, strike")
         query = "\n".join(query)
         log.info("Full query: ")
         log.info(query)
@@ -64,42 +64,35 @@ def generate_iv_surface(**context):
     if len(results) == 0:
         log.info(f"No data for {ocd}. Skipping surface generation.")
         return
-    all_data = []
     days_til_expiry = []
     days_til_expiry_extended = []
     strikes = []
-    implied_vols = []
+    liquidity = []
     log.info("Skipping interpolation, making all unknowns constant.")
-    maturities = list(set(results["days_til_expiry"]))
-    maturities.sort(reverse=True)
-    for maturity in maturities:
-        all_data.append(results)
-        days_til_expiry.append(maturity)
+    days_til_expiry = list(results["days_til_expiry"])
     # Repeat missing data:
-    for row in range(len(all_data)):
-        implied_vols.append(all_data[row]["impliedvolatility"])
-        strikes.append(all_data[row]["strike"])
-        days_til_expiry_extended.append(np.repeat(days_til_expiry[row], len(all_data[row])))
+    for row in range(len(results)):
+        # repeat DTE so the list has same length as the other lists
+        days_til_expiry_extended.append(np.repeat(days_til_expiry[row], len(results)))
+        strikes.append(results.iloc[row, 1])
+        liquidity.append(results.iloc[row, 2])
     # Unlist list of lists:
-    log.info("Unlisting data before plotting.")
     strikes = list(chain(*strikes))
     days_til_expiry_extended = list(chain(*days_til_expiry_extended))
-    implied_vols = list(chain(*implied_vols))
+    liquidity = list(chain(*liquidity))
     # Generate surface:
     plt.clf()
     fig = plt.figure(figsize=(7,7))
     axs = plt.axes(projection="3d")
-    #Test:
-    log.info("lens: %s", [len(strikes), len(days_til_expiry_extended), len(implied_vols)])
     # use plot_trisurf from mplot3d to plot surface and cm for color scheme
-    axs.plot_trisurf(strikes, days_til_expiry_extended, implied_vols, cmap=cm.jet)
+    axs.plot_trisurf(strikes, days_til_expiry, liquidity, cmap=cm.jet)
     # change angle
     axs.view_init(30, 65)
     # add labels
     plt.xlabel("Strike")
     plt.ylabel("Days Til Expiration")
-    plt.title(f"{ticker.upper()} IV Surface on {ocd.strftime('%m/%d/%y')}")
-    outpath = os.path.join(vsd, f"{ticker.lower()}_iv_surface_{ocd.strftime('%m_%d_%y')}.png")
+    plt.title(f"{ticker.lower()} Liquidity (Ask - Bid) on {ocd.strftime('%m/%d/%y')}")
+    outpath = os.path.join(vsd, f"{ticker.lower()}_liquidity_surface_{ocd.strftime('%m_%d_%y')}.png")
     log.info(f"Output figure to {outpath}.")
     plt.savefig(outpath)
     log.info("Ending generate_iv_surface().")
