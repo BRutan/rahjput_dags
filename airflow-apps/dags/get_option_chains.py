@@ -89,7 +89,7 @@ with DAG(
     log = logging.getLogger()
     log.setLevel(logging.INFO)
     present = datetime.now()
-    end_time = datetime(year=present.year, month=present.month, day=present.day, hour=17, minute=0)
+    end_time = datetime(year=present.year, month=present.month, day=present.day + 1, hour=10, minute=0)
     
     start = EmptyOperator(task_id = 'start')
     
