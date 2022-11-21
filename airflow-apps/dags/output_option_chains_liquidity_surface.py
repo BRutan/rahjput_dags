@@ -22,41 +22,41 @@ import sys
 ##################
 # Operators:
 ##################
-def generate_iv_surface(**context):
+def generate_liquidity_surface(**context):
     """
-    * Generate (average) implied volatility surface for individual day for individual
+    * Generate (average) liquidity surface (ask - bid) for individual day for individual
     ticker, output as png to volatility_surfaces_dir.
     """
     log = context["log"]
-    log.info("Starting generate_iv_surface().")
+    log.info("Starting generate_liquidity_surface().")
     strike_pm = float(context["strike_pm"]) if context["strike_pm"] else ""
     option_type = context["option_type"].lower()
     ticker = context["ticker"].upper()
     tickers = Variable.get("option_chains_tables", {}, deserialize_json=True)
     ocd = dtparse(context["option_chains_date"])
-    vsd = Variable.get("volatility_surfaces_dir")
+    vsd = Variable.get("liquidity_surfaces_dir")
     if not os.path.exists(vsd):
-        log.info(f"Making implied volatility surfaces directory at {vsd}.")
+        log.info(f"Making liquidity surfaces directory at {vsd}.")
         os.mkdir(vsd)
     vsd = os.path.join(vsd, ticker)
     if not os.path.exists(vsd):
-        log.info(f"Making implied volatility surfaces directory for ticker at {vsd}.")
+        log.info(f"Making liquidity surfaces directory for ticker at {vsd}.")
         os.mkdir(vsd)
     
-    log.info(f"Generating surface for ticker {ticker} and option chain valuation date {ocd}.")
+    log.info(f"Generating liquidity surface for ticker {ticker} and option chain valuation date {ocd}.")
     option_chain_table = tickers[ticker]
     pg_hook = PostgresHook(conn_id = context["conn_id"])
     log.info("Getting data.")
     results = pd.DataFrame()
     with pg_hook.get_conn() as conn:
         query = ["WITH has_dte AS ("]
-        query.append("SELECT DATE_PART('day', expirationdate - upload_timestamp) AS days_til_expiry, strike, ask - bid as liquidity")
+        query.append("SELECT DATE_PART('day', expirationdate - upload_timestamp) AS days_til_expiry, strike, (ask - bid) * 100 as liquidity")
         query.append(f"FROM {option_chain_table} WHERE iscall = {True if option_type.lower() == 'calls' else False} ")
         if strike_pm:
             query.append("AND moneyness BETWEEN -{strike_pm} AND {strike_pm}")
         query.append(f"AND EXTRACT(MONTH FROM upload_timestamp) = {ocd.month} AND EXTRACT(DAY FROM upload_timestamp) = {ocd.day} AND EXTRACT(YEAR FROM upload_timestamp) = {ocd.year})")
-        query.append("SELECT days_til_expiry, strike, AVG(impliedvolatility) AS impliedvolatility")
-        query.append("FROM has_dte GROUP BY days_til_expiry, strike")
+        query.append("SELECT days_til_expiry, strike, AVG(liquidity) AS liquidity")
+        query.append("FROM has_dte GROUP BY days_til_expiry, strike ORDER BY days_til_expiry DESC, strike DESC")
         query = "\n".join(query)
         log.info("Full query: ")
         log.info(query)
@@ -64,19 +64,24 @@ def generate_iv_surface(**context):
     if len(results) == 0:
         log.info(f"No data for {ocd}. Skipping surface generation.")
         return
+    all_data = []
     days_til_expiry = []
     days_til_expiry_extended = []
     strikes = []
     liquidity = []
     log.info("Skipping interpolation, making all unknowns constant.")
-    days_til_expiry = list(results["days_til_expiry"])
+    maturities = list(set(results["days_til_expiry"]))
+    maturities.sort(reverse=True)
+    for maturity in maturities:
+        all_data.append(results)
+        days_til_expiry.append(maturity)
     # Repeat missing data:
-    for row in range(len(results)):
-        # repeat DTE so the list has same length as the other lists
-        days_til_expiry_extended.append(np.repeat(days_til_expiry[row], len(results)))
-        strikes.append(results.iloc[row, 1])
-        liquidity.append(results.iloc[row, 2])
+    for row in range(len(all_data)):
+        liquidity.append(all_data[row]["liquidity"])
+        strikes.append(all_data[row]["strike"])
+        days_til_expiry_extended.append(np.repeat(days_til_expiry[row], len(all_data[row])))
     # Unlist list of lists:
+    log.info("Unlisting data before plotting.")
     strikes = list(chain(*strikes))
     days_til_expiry_extended = list(chain(*days_til_expiry_extended))
     liquidity = list(chain(*liquidity))
@@ -85,17 +90,18 @@ def generate_iv_surface(**context):
     fig = plt.figure(figsize=(7,7))
     axs = plt.axes(projection="3d")
     # use plot_trisurf from mplot3d to plot surface and cm for color scheme
-    axs.plot_trisurf(strikes, days_til_expiry, liquidity, cmap=cm.jet)
+    axs.plot_trisurf(strikes, days_til_expiry_extended, liquidity, cmap=cm.jet)
     # change angle
     axs.view_init(30, 65)
     # add labels
     plt.xlabel("Strike")
     plt.ylabel("Days Til Expiration")
-    plt.title(f"{ticker.lower()} Liquidity (Ask - Bid) on {ocd.strftime('%m/%d/%y')}")
+    plt.zlabel("Liquidity")
+    plt.title(f"{ticker.upper()} Liquidity Surface on {ocd.strftime('%m/%d/%y')}")
     outpath = os.path.join(vsd, f"{ticker.lower()}_liquidity_surface_{ocd.strftime('%m_%d_%y')}.png")
     log.info(f"Output figure to {outpath}.")
     plt.savefig(outpath)
-    log.info("Ending generate_iv_surface().")
+    log.info("Ending generate_liquidity_surface().")
 
 with DAG(
     dag_id=get_dag_name(__file__),
@@ -127,8 +133,8 @@ with DAG(
     check_params_task = PythonOperator(task_id="check_params",
                                        python_callable=check_params,
                                        op_kwargs=op_kwargs)
-    generate_iv_surface_task = PythonOperator(task_id="generate_iv_surface",
-                                              python_callable=generate_iv_surface,
+    generate_iv_surface_task = PythonOperator(task_id="generate_liquidity_surface",
+                                              python_callable=generate_liquidity_surface,
                                               op_kwargs=op_kwargs)   
 
     start >> check_params_task >> generate_iv_surface_task

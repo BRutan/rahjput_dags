@@ -89,8 +89,6 @@ def generate_iv_surface(**context):
     plt.clf()
     fig = plt.figure(figsize=(7,7))
     axs = plt.axes(projection="3d")
-    #Test:
-    log.info("lens: %s", [len(strikes), len(days_til_expiry_extended), len(implied_vols)])
     # use plot_trisurf from mplot3d to plot surface and cm for color scheme
     axs.plot_trisurf(strikes, days_til_expiry_extended, implied_vols, cmap=cm.jet)
     # change angle
