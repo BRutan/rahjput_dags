@@ -179,7 +179,7 @@ with DAG(
     dag_id='create_tables',
     start_date=datetime.now(),
     catchup=False,
-    schedule='@once'
+    schedule=None
 ) as dag:
     
     log = logging.getLogger()
