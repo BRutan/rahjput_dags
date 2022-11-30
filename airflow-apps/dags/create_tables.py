@@ -18,16 +18,12 @@ import sys
 def get_tickers(**context) -> None:
     """Get tickers to create tables.
     """
-    tickers_path = os.path.join(os.environ['POSTGRES_DEFS'], 'tickers.txt')
     log = context['log']
-    if not os.path.exists(tickers_path):
-        err_msg = f'{tickers_path} does not exist.'
-        log.exception(err_msg)
-        raise Exception(err_msg)
-    with open(tickers_path, 'r') as f:
-        tickers = f.read().split(',')
-        tickers = [ticker.strip() for ticker in tickers if ticker.strip()]
-        context['ti'].xcom_push(key='tickers', value=tickers)
+    log.info("Getting all tickers from tickers_to_track variable.")
+    tickers = Variable.get("tickers_to_track")
+    tickers = tickers.split(",")
+    tickers = [ticker.strip("'\"") for ticker in tickers if ticker.strip("'\"")]
+    context['ti'].xcom_push(key='tickers', value=tickers)
         
 def generate_schemas(**context):
     """ Create all schemas.
@@ -164,6 +160,17 @@ def insert_tickers_to_track(**context):
         stmt = f"INSERT INTO {target_schema}.{target_table} (ticker) VALUES {args} ON CONFLICT DO NOTHING"
         log.info(stmt)
         cursor.execute(stmt, tuple(tickers))
+        # Update the tickers_to_track with already present tickers if some were removed:
+        cursor.execute(f"SELECT ticker FROM {target_schema}.{target_table}")
+        tickers_to_track = [elem[0] for elem in cursor.fetchall()]
+        tickers_to_track.sort()
+        diff = set(tickers_to_track) - set(tickers)
+        if diff:
+            diff = list(diff)
+            diff.sort()
+            log.info("Adding back the following tickers to 'tickers_to_track' variable since present in database: %s", ",".join(diff))
+        Variable.set(key="tickers_to_track", value=",".join(tickers_to_track))
+    
             
 ##############
 # Dag:
