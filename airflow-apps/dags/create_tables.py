@@ -184,7 +184,7 @@ with DAG(
     
     log = logging.getLogger()
     log.setLevel(logging.INFO)
-    start = EmptyOperator(task_id = 'start', dag=dag)
+    start = EmptyOperator(task_id='start', dag=dag)
     
     get_tickers_task = PythonOperator(task_id='get_tickers', 
                                       python_callable=get_tickers, 
