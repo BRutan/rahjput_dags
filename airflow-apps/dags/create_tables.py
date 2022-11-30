@@ -160,14 +160,10 @@ def insert_tickers_to_track(**context):
     tickers = context['ti'].xcom_pull(task_ids='get_tickers', key='tickers')
     with pg_hook.get_conn() as pg_conn:
         cursor = pg_conn.cursor()
-        for num, ticker in enumerate(tickers):
-            try:
-                stmt = f"INSERT INTO {target_schema}.{target_table} (ticker) VALUES ('{ticker}')"
-                log.info(stmt)
-                cursor.execute(stmt)
-            except Exception as ex:
-                log.exception(ex)
-                raise ex
+        args = ','.join(cursor.mogrify("(%s)", (ticker,)).decode('utf-8') for ticker in tickers)
+        stmt = f"INSERT INTO {target_schema}.{target_table} (ticker) VALUES {args} ON CONFLICT DO NOTHING"
+        log.info(stmt)
+        cursor.execute(stmt, tuple(tickers))
             
 ##############
 # Dag:

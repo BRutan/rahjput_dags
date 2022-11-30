@@ -5,7 +5,7 @@ from airflow.operators.python import PythonOperator
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.utils.dates import days_ago
 from common import get_columns_to_write, get_dag_name, get_variable_values
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import os
 import pandas as pd
@@ -81,7 +81,7 @@ def get_option_chain_and_insert(tk, ticker, engine, target_table, target_schema,
 with DAG(
     dag_id=get_dag_name(__file__),
     catchup=False,
-    start_date=days_ago(1),
+    start_date=datetime(year=2022, month=10, day=31),
     schedule="30 14 * * 1-5",
     max_active_tasks=30
 ) as dag:
@@ -89,7 +89,7 @@ with DAG(
     log = logging.getLogger()
     log.setLevel(logging.INFO)
     present = datetime.now()
-    end_time = datetime(year=present.year, month=present.month, day=present.day + 1, hour=10, minute=0)
+    end_time = present + timedelta(hours=9)
     
     start = EmptyOperator(task_id = 'start')
     
